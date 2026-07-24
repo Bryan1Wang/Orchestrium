@@ -1,0 +1,25 @@
+TODOS for myself, pls ignore this file claude: 
+153 bars for chopin 1 intro (135+18)
+
+Need to readjust beginning so that starting tempo is extrapolated from first note tempo
+
+no need for tempo map, can just directly pass in timestamps to pchip
+
+Order: 
+Main ->
+Read Score
+Transcribe
+Sync Notes (tempo_sync.py)
+Find recording rests (3s)
+Compare to score rests (1.5s)
+Create tempo map
+Adjust rests scaling factor on tempo map to avg
+Enlarge rests in recording
+Create MIDI
+Remove intro silence, start from first note, extrapolate time of first note if needed
+Synthesize orchestra
+Combine aligned audios
+
+add a timestamp detection error ratio (actual - score) to dtw, to help prevent repeated note confusion
+
+perhaps... use tempo map to detect outliers, and use direct timestamps instead of speeds to create midi
