@@ -100,7 +100,7 @@ def main():
     print(counter)
 
     create_midi.make_midi(
-        r"C:\Users\Bryan\Downloads\Orchestrium2\orchestra-warp-backend\data\raw\SOLO.mid",
+        r"C:\Users\Bryan\Downloads\Orchestrium2\orchestra-warp-backend\data\raw\score_cropped.mid",
         alignment_results,
         r"C:\Users\Bryan\Downloads\Orchestrium2\orchestra-warp-backend\data\output\output.mid",
     )
