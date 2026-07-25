@@ -9,7 +9,9 @@ import pretty_midi
 from scipy.interpolate import PchipInterpolator
 from scipy.stats import theilslopes
 
-REFERENCE_TEMPO = 500_000  # fixed 120 BPM reference tempo used for tick<->second conversion
+REFERENCE_TEMPO = (
+    500_000  # fixed 120 BPM reference tempo used for tick<->second conversion
+)
 
 WarpTime = Callable[[float], float]
 
@@ -83,10 +85,14 @@ def _detect_erratic_blocks(
 
     for i in range(rm):
         t = times[i]
-        left_lo = np.searchsorted(times, t - exclusion_radius - side_search_radius, side="left")
+        left_lo = np.searchsorted(
+            times, t - exclusion_radius - side_search_radius, side="left"
+        )
         left_hi = np.searchsorted(times, t - exclusion_radius, side="left")
         right_lo = np.searchsorted(times, t + exclusion_radius, side="right")
-        right_hi = np.searchsorted(times, t + exclusion_radius + side_search_radius, side="right")
+        right_hi = np.searchsorted(
+            times, t + exclusion_radius + side_search_radius, side="right"
+        )
 
         for lo, hi in ((left_lo, left_hi), (right_lo, right_hi)):
             ref = side_reference(times[lo:hi], warped[lo:hi])
@@ -244,7 +250,9 @@ def _clean_anchors(
     return rep_times[rep_keep], rep_warped[rep_keep]
 
 
-def _fit_segment(seg_times, seg_warped, fallback_speed_before=1.0, fallback_speed_after=1.0):
+def _fit_segment(
+    seg_times, seg_warped, fallback_speed_before=1.0, fallback_speed_after=1.0
+):
     """Build a score_time -> player_time closure over one contiguous run of
     cleaned anchors.
 
@@ -260,7 +268,11 @@ def _fit_segment(seg_times, seg_warped, fallback_speed_before=1.0, fallback_spee
         anchor_p = seg_warped[0]
 
         def flat_warp_time(score_time):
-            speed = fallback_speed_before if score_time <= anchor_t else fallback_speed_after
+            speed = (
+                fallback_speed_before
+                if score_time <= anchor_t
+                else fallback_speed_after
+            )
             return anchor_p + (score_time - anchor_t) / speed
 
         return flat_warp_time
@@ -282,7 +294,9 @@ def _fit_segment(seg_times, seg_warped, fallback_speed_before=1.0, fallback_spee
     return warp_time
 
 
-def _estimate_start_speed(good_times, good_warped, window_seconds=10.0, fallback_speed=1.0):
+def _estimate_start_speed(
+    good_times, good_warped, window_seconds=10.0, fallback_speed=1.0
+):
     """Estimate the tempo (score-seconds per player-second) at the very
     start of the piece, for extrapolating before the first anchor.
 
@@ -306,7 +320,40 @@ def _estimate_start_speed(good_times, good_warped, window_seconds=10.0, fallback
     return (good_times[last] - good_times[0]) / (good_warped[last] - good_warped[0])
 
 
-def _compute_intro_shift(good_times, good_warped, start_speed, score_start=0.0, lead_in_seconds=1.0):
+def _windowed_edge_speed(good_times, good_warped, near_idx, bound_idx, window_seconds, forward):
+    """Secant slope from `near_idx` to the farthest anchor within
+    `window_seconds` of score time on the given side, without crossing
+    `bound_idx`.
+
+    Same idea as _estimate_start_speed, generalized to look in either
+    direction and to respect a hard bound (so the window can't reach across
+    a neighboring rest): averaging the secant over more surrounding anchors
+    keeps one atypical note right at the rest's edge from fully determining
+    the estimate. Falls back to the immediate neighbor if nothing else
+    qualifies (e.g. the next anchor is already farther than window_seconds
+    away), and to None if there is no neighbor at all within bound_idx.
+    """
+    if forward:
+        if near_idx >= bound_idx or near_idx >= len(good_times) - 1:
+            return None
+        idxs = np.arange(near_idx + 1, bound_idx + 1)
+        in_window = good_times[idxs] <= good_times[near_idx] + window_seconds
+        far = idxs[in_window][-1] if in_window.any() else idxs[0]
+    else:
+        if near_idx <= bound_idx:
+            return None
+        idxs = np.arange(bound_idx, near_idx)
+        in_window = good_times[idxs] >= good_times[near_idx] - window_seconds
+        far = idxs[in_window][0] if in_window.any() else idxs[-1]
+
+    return (good_times[near_idx] - good_times[far]) / (
+        good_warped[near_idx] - good_warped[far]
+    )
+
+
+def _compute_intro_shift(
+    good_times, good_warped, start_speed, score_start=0.0, lead_in_seconds=1.0
+):
     """Player-time shift needed so the leading intro has time to play.
 
     Given `start_speed` (see _estimate_start_speed), estimates how long the
@@ -336,7 +383,7 @@ class RestRecord:
     player_end: float
 
 
-def _build_split_warp(good_times, good_warped, tutti_rests):
+def _build_split_warp(good_times, good_warped, tutti_rests, tempo_window_seconds=5.0):
     """Build a warp_time() that treats each tutti rest as a constant-speed
     segment instead of letting a single PCHIP curve interpolate through it.
 
@@ -349,8 +396,12 @@ def _build_split_warp(good_times, good_warped, tutti_rests):
     # Step 1: locate each rest against good_times. A genuine score rest can
     # never contain an anchor (tempo_sync.align only anchors at real score
     # events), so right_start_idx == left_end_idx + 1 whenever both exist.
-    left_end_idx = [int(np.searchsorted(good_times, s, side="right")) - 1 for s, _ in raw_rests]
-    right_start_idx = [int(np.searchsorted(good_times, e, side="left")) for _, e in raw_rests]
+    left_end_idx = [
+        int(np.searchsorted(good_times, s, side="right")) - 1 for s, _ in raw_rests
+    ]
+    right_start_idx = [
+        int(np.searchsorted(good_times, e, side="left")) for _, e in raw_rests
+    ]
 
     # Step 2: coalesce rests that would leave an empty solo segment between
     # them into one combined rest, so every interior segment keeps >= 1
@@ -369,22 +420,23 @@ def _build_split_warp(good_times, good_warped, tutti_rests):
     rests.append((cur_start, cur_end, cur_le, cur_rs))
     R = len(rests)
 
-    # Step 3: local edge speed just before / just after each rest, bounded
-    # so it can't reach across a neighboring rest.
+    # Step 3: edge speed just before / just after each rest, averaged over
+    # up to tempo_window_seconds of score time on each side (instead of a
+    # single adjacent anchor pair) so one atypical note right at the rest's
+    # edge doesn't fully determine the estimate. Bounded so the window can't
+    # reach across a neighboring rest.
     lo_bounds = [rests[k - 1][3] if k > 0 else 0 for k in range(R)]
     hi_bounds = [rests[k + 1][2] if k < R - 1 else N - 1 for k in range(R)]
 
     tutti_speed = []
     for k in range(R):
         _, _, le, rs = rests[k]
-        before_speed = None
-        if le >= 1 and le - 1 >= lo_bounds[k]:
-            a, b = le - 1, le
-            before_speed = (good_times[b] - good_times[a]) / (good_warped[b] - good_warped[a])
-        after_speed = None
-        if rs <= N - 2 and rs + 1 <= hi_bounds[k]:
-            a, b = rs, rs + 1
-            after_speed = (good_times[b] - good_times[a]) / (good_warped[b] - good_warped[a])
+        before_speed = _windowed_edge_speed(
+            good_times, good_warped, le, lo_bounds[k], tempo_window_seconds, forward=False
+        )
+        after_speed = _windowed_edge_speed(
+            good_times, good_warped, rs, hi_bounds[k], tempo_window_seconds, forward=True
+        )
 
         if before_speed is not None and after_speed is not None:
             tutti_speed.append((before_speed + after_speed) / 2)
@@ -550,6 +602,7 @@ def build_warp_curve(
     max_gap_seconds: float = 10.0,
     chunk_seconds: float = 1,
     tutti_rests=None,
+    tempo_window_seconds: float = 5.0,
     extend_intro: bool = False,
     score_start: float = 0.0,
     intro_lead_in_seconds: float = 1.0,
@@ -572,6 +625,7 @@ def build_warp_curve(
     max_gap_seconds: float = 10.0,
     chunk_seconds: float = 1,
     tutti_rests=None,
+    tempo_window_seconds: float = 5.0,
     extend_intro: bool = False,
     score_start: float = 0.0,
     intro_lead_in_seconds: float = 1.0,
@@ -594,6 +648,7 @@ def build_warp_curve(
     max_gap_seconds: float = 10.0,
     chunk_seconds: float = 1,
     tutti_rests=None,
+    tempo_window_seconds: float = 5.0,
     extend_intro: bool = False,
     score_start: float = 0.0,
     intro_lead_in_seconds: float = 1.0,
@@ -612,7 +667,11 @@ def build_warp_curve(
     is instead treated as its own constant-speed segment -- see
     _build_split_warp -- and `return_diagnostics=True` additionally returns
     the list of per-rest RestRecord diagnostics (tutti_speed, natural vs.
-    computed duration, shortfall, etc.) alongside warp_time.
+    computed duration, shortfall, etc.) alongside warp_time. Each rest's
+    speed is estimated from up to `tempo_window_seconds` of score time on
+    either side (see _windowed_edge_speed), not just the single nearest
+    anchor pair, falling back to a narrower window near piece boundaries or
+    a neighboring rest.
 
     If `extend_intro=True`, the leading intro -- from `score_start` to the
     first cleaned anchor -- gets its full natural duration instead of
@@ -649,11 +708,15 @@ def build_warp_curve(
         warp_time = _fit_segment(good_times, good_warped)
         diagnostics = None
     else:
-        warp_time, diagnostics = _build_split_warp(good_times, good_warped, tutti_rests)
+        warp_time, diagnostics = _build_split_warp(
+            good_times, good_warped, tutti_rests, tempo_window_seconds
+        )
 
     intro_shift = 0.0
     if extend_intro:
-        start_speed = _estimate_start_speed(good_times, good_warped, start_speed_window_seconds)
+        start_speed = _estimate_start_speed(
+            good_times, good_warped, start_speed_window_seconds
+        )
         intro_shift = _compute_intro_shift(
             good_times, good_warped, start_speed, score_start, intro_lead_in_seconds
         )
@@ -661,17 +724,24 @@ def build_warp_curve(
         intro_boundary = good_times[0]
         intro_boundary_player = good_warped[0] + intro_shift
 
-        def warp_time(t, _inner=inner_warp_time, _boundary=intro_boundary,
-                       _boundary_player=intro_boundary_player, _speed=start_speed,
-                       _shift=intro_shift):
+        def _extended_warp_time(
+            score_time,
+            _inner=inner_warp_time,
+            _boundary=intro_boundary,
+            _boundary_player=intro_boundary_player,
+            _speed=start_speed,
+            _shift=intro_shift,
+        ):
             # Before the first anchor, use the robustly-estimated start
             # speed directly (constant-speed line) instead of delegating to
             # _inner, whose own edge extrapolation there is only a naive
             # 2-anchor slope -- otherwise the shift would be sized for one
             # speed but rendered at another.
-            if t <= _boundary:
-                return _boundary_player + (t - _boundary) / _speed
-            return _inner(t) + _shift
+            if score_time <= _boundary:
+                return _boundary_player + (score_time - _boundary) / _speed
+            return _inner(score_time) + _shift
+
+        warp_time = _extended_warp_time
 
     return (warp_time, diagnostics, intro_shift) if return_diagnostics else warp_time
 
@@ -691,6 +761,7 @@ def make_midi(
     max_gap_seconds=10.0,
     chunk_seconds=1,
     tutti_rests=None,
+    tempo_window_seconds=5.0,
     extend_intro=False,
     score_start=0.0,
     intro_lead_in_seconds=1.0,
@@ -701,9 +772,11 @@ def make_midi(
     Convenience wrapper: builds a score_time -> player_time warp curve from
     `anchors` (see `build_warp_curve`; `tutti_rests`, if given, is forwarded
     so score rests are treated as constant-speed segments instead of raw
-    PCHIP; `extend_intro`, if True, is forwarded so the leading intro gets
-    its full natural duration -- see build_warp_curve's docstring), then
-    hands it to `warp_midi_file`. If you already have a warp curve built
+    PCHIP, with `tempo_window_seconds` controlling how far the surrounding
+    tempo estimate reaches on each side; `extend_intro`, if True, is
+    forwarded so the leading intro gets its full natural duration -- see
+    build_warp_curve's docstring), then hands it to `warp_midi_file`. If you
+    already have a warp curve built
     (e.g. you needed it for diagnostics or rest verification first), call
     `warp_midi_file` directly instead of this, to avoid rebuilding the same
     curve again.
@@ -721,6 +794,7 @@ def make_midi(
         max_gap_seconds=max_gap_seconds,
         chunk_seconds=chunk_seconds,
         tutti_rests=tutti_rests,
+        tempo_window_seconds=tempo_window_seconds,
         extend_intro=extend_intro,
         score_start=score_start,
         intro_lead_in_seconds=intro_lead_in_seconds,
@@ -821,9 +895,13 @@ if __name__ == "__main__":
     )
 
     print(f"First score note at score time {first_score_time:.3f}s")
-    print(f"start_speed: naive (2-anchor) = {naive_speed:.4f}  windowed (10s) = {windowed_speed:.4f}")
+    print(
+        f"start_speed: naive (2-anchor) = {naive_speed:.4f}  windowed (10s) = {windowed_speed:.4f}"
+    )
     print(f"intro_shift = {intro_shift:.3f}s")
-    print(f"warp_time(0)                 before={plain_warp(0):7.3f}s  after={shifted_warp(0):7.3f}s")
+    print(
+        f"warp_time(0)                 before={plain_warp(0):7.3f}s  after={shifted_warp(0):7.3f}s"
+    )
     print(
         f"warp_time(first_score_time)  before={plain_warp(first_score_time):7.3f}s  "
         f"after={shifted_warp(first_score_time):7.3f}s"

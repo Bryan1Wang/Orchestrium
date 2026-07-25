@@ -1,3 +1,4 @@
+import itertools
 from pathlib import Path
 
 import pretty_midi
@@ -48,7 +49,7 @@ def find_score_rests(midi_path=None, min_rest_seconds=3.0):
     intervals = sounding_intervals_from_midi(midi_path)
 
     rests = []
-    for (_, prev_end), (next_start, _) in zip(intervals, intervals[1:]):
+    for (_, prev_end), (next_start, _) in itertools.pairwise(intervals):
         gap = next_start - prev_end
         if gap >= min_rest_seconds:
             rests.append((prev_end, next_start))
@@ -144,60 +145,3 @@ def get_verified_tutti_rests(
         verified.append((rest_start_score, rest_end_score))
 
     return verified
-
-
-if __name__ == "__main__":
-    # Temporary: for testing this one feature in isolation. Remove once
-    # rest-detection is wired into the real pipeline.
-    import numpy as np
-
-    import audio_utils
-    import create_midi
-    import score_reader
-    import tempo_sync
-    import transcribe
-
-    sheet_music_sequence = score_reader.extract_notes()
-    player_onset_sequence = transcribe.transcribe()
-    alignment_results = tempo_sync.align(player_onset_sequence, sheet_music_sequence)
-
-    base_warp = create_midi.build_warp_curve(alignment_results)
-
-    tutti_rests = get_verified_tutti_rests(warp_time=base_warp)
-    print(f"Found {len(tutti_rests)} verified tutti rests:")
-    for s, e in tutti_rests:
-        print(
-            f"  score {s:.2f}s -> {e:.2f}s (span {e - s:.2f}s), "
-            f"expected player {base_warp(s):.2f}s -> {base_warp(e):.2f}s"
-        )
-
-    if tutti_rests:
-        warp_with_rests, diagnostics, intro_shift = create_midi.build_warp_curve(
-            alignment_results, tutti_rests=tutti_rests, return_diagnostics=True
-        )
-        for rec in diagnostics:
-            print(
-                f"  rest {rec.rest_start_score:.2f}-{rec.rest_end_score:.2f}: "
-                f"tutti_speed={rec.tutti_speed:.3f} natural={rec.natural_duration:.2f}s "
-                f"computed={rec.computed_duration:.2f}s shortfall={rec.shortfall:.2f}s"
-            )
-
-        last_score_time = sheet_music_sequence[-1][0]
-        for t in np.linspace(0, last_score_time, 20):
-            print(
-                f"t={t:7.2f}s  base={base_warp(t):7.2f}s  with_rests={warp_with_rests(t):7.2f}s  "
-                f"delta={warp_with_rests(t) - base_warp(t):+6.2f}s"
-            )
-
-        extended_path = audio_utils.extend_rec_pauses(diagnostics)
-        print(f"Wrote {extended_path}")
-
-        # warp_midi_file (not make_midi) so this reuses warp_with_rests
-        # directly instead of triggering a third _clean_anchors/curve-fit
-        # pass through build_warp_curve.
-        score_path = PROJECT_ROOT / "data" / "raw" / "score_cropped.mid"
-        midi_output_path = PROJECT_ROOT / "data" / "output" / "output_with_rests.mid"
-        create_midi.warp_midi_file(score_path, warp_with_rests, midi_output_path)
-        print(f"Wrote {midi_output_path}")
-    else:
-        print("No verified tutti rests -- nothing to extend.")

@@ -43,14 +43,16 @@ def trim_rec_intro(output_path=None, buffer_seconds=1.0):
     crop_time = find_intro_crop_point(buffer_seconds=buffer_seconds)
 
     audio = AudioSegment.from_mp3(rec_path)
-    trimmed = audio[crop_time * 1000:]
+    trimmed = audio[crop_time * 1000 :]
     trimmed.export(output_path, format="mp3")
 
     print(f"Wrote trimmed audio ({trimmed.duration_seconds:.2f}s) to {output_path}")
     return output_path
 
 
-def extend_rec_pauses(rest_diagnostics, output_path=None, buffer_seconds=0.0, rec_path=None):
+def extend_rec_pauses(
+    rest_diagnostics, output_path=None, buffer_seconds=0.0, rec_path=None
+):
     """Splice real silence into REC.mp3 at each extended tutti rest.
 
     rest_diagnostics: the list create_midi.build_warp_curve(...,
@@ -95,7 +97,9 @@ def extend_rec_pauses(rest_diagnostics, output_path=None, buffer_seconds=0.0, re
     return output_path
 
 
-def mute_and_pad_intro(audio: AudioSegment, mute_time: float, intro_shift: float) -> AudioSegment:
+def mute_and_pad_intro(
+    audio: AudioSegment, mute_time: float, intro_shift: float
+) -> AudioSegment:
     """Replace the recording's own natural lead-in (up to mute_time) with
     clean silence, then add intro_shift more on top.
 
@@ -107,7 +111,7 @@ def mute_and_pad_intro(audio: AudioSegment, mute_time: float, intro_shift: float
     audible.
     """
     mute_time = max(0.0, mute_time)
-    trimmed = audio[round(mute_time * 1000):]
+    trimmed = audio[round(mute_time * 1000) :]
     pad_ms = round((mute_time + intro_shift) * 1000)
     return AudioSegment.silent(duration=pad_ms) + trimmed
 

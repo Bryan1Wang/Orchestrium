@@ -10,7 +10,7 @@ def map_tempo(
     for pt in points:
         unique_dict[pt[0]] = pt[1]
 
-    score_times = sorted(list(unique_dict.keys()))
+    score_times = sorted(unique_dict.keys())
 
     i = 0
 

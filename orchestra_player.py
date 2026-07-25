@@ -220,16 +220,20 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
             # Copy global metadata
 
             for msg in mid.tracks[0]:
-                if msg.is_meta and msg.type in ("set_tempo", "time_signature", "key_signature"):
-                        # msg.time is a delta relative to the previous message
-                        # in track 0's own sequence -- meaningless once copied
-                        # into this new, otherwise-empty track. Keeping it
-                        # would accumulate as a silent preamble before any
-                        # real note, pushing this region's audible content
-                        # later by however much time elapses between track
-                        # 0's meta messages (e.g. a meter change partway
-                        # through the piece).
-                        new_track.append(msg.copy(time=0))
+                if msg.is_meta and msg.type in (
+                    "set_tempo",
+                    "time_signature",
+                    "key_signature",
+                ):
+                    # msg.time is a delta relative to the previous message
+                    # in track 0's own sequence -- meaningless once copied
+                    # into this new, otherwise-empty track. Keeping it
+                    # would accumulate as a silent preamble before any
+                    # real note, pushing this region's audible content
+                    # later by however much time elapses between track
+                    # 0's meta messages (e.g. a meter change partway
+                    # through the piece).
+                    new_track.append(msg.copy(time=0))
 
             # rebuild delta timing
 

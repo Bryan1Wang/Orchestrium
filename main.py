@@ -1,6 +1,13 @@
 import logging
 import os
 
+# Silence TensorFlow native startup logs (must run before tensorflow is imported,
+# which happens transitively via audio_utils -> transcribe -> basic_pitch)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
+# Silence the root/basic-pitch warnings (coremltools/tflite/onnx "not installed" notices)
+logging.getLogger().setLevel(logging.ERROR)
+
 # import sys
 from pathlib import Path
 
@@ -14,12 +21,6 @@ import rest_utils
 import score_reader
 import tempo_sync
 import transcribe
-
-# Silence TensorFlow messages
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
-# Silence the root/basic-pitch warnings
-logging.getLogger().setLevel(logging.ERROR)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -163,7 +164,8 @@ def main():
 
     if orchestra_audio is not None:
         final_mix = audio_utils.overlay_with_gain(
-            orchestra_audio, solo_audio,
+            orchestra_audio,
+            solo_audio,
             orchestra_gain_db=ORCHESTRA_GAIN_DB,
             solo_gain_db=SOLO_GAIN_DB,
         )
