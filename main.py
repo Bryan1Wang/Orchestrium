@@ -108,14 +108,13 @@ def main():
 
 if __name__ == "__main__":
     # Open log file and redirect stdout BEFORE running main
-    log_file = open("debug_output.txt", "w", encoding="utf-8")
-    sys.stdout = log_file
+    with open("debug_output.txt", "w", encoding="utf-8") as log_file:
+        sys.stdout = log_file
 
-    try:
-        main()
-    finally:
-        # This guarantees your file closes properly even if the code crashes
-        sys.stdout = sys.__stdout__
-        log_file.close()
+        try:
+            main()
+        finally:
+            # This guarantees stdout is restored even if the code crashes
+            sys.stdout = sys.__stdout__
 
     # main()
