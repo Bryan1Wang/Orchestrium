@@ -13,7 +13,10 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
     PROJECT_ROOT = SRC_DIR.parent
 
     sfizz_path = os.path.abspath(PROJECT_ROOT / "bin" / sfizz_path)
-    midi_path = os.path.abspath(PROJECT_ROOT / "data" / "raw" / midi_filename)
+    if os.path.isabs(midi_filename):
+        midi_path = midi_filename
+    else:
+        midi_path = os.path.abspath(PROJECT_ROOT / "data" / "raw" / midi_filename)
     final_master = os.path.abspath(PROJECT_ROOT / final_master_filename)
 
     output_dir = os.path.dirname(final_master)
@@ -25,19 +28,29 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
     VPO = PROJECT_ROOT / "VPO"
 
     STRINGS = VPO / "Strings" / "all-strings-SEC-normal-mod-wheel.sfz"
+    PIZZICATO = VPO / "Strings" / "all-strings-SEC-pizzicato.sfz"
+    TREMOLO = VPO / "Strings" / "all-strings-SEC-tremolo.sfz"
+    HARP = VPO / "Strings" / "harp-sustain.sfz"
 
-    FLUTE = VPO / "Woodwinds" / "flute-NORMAL-mod-wheel.sfz"
-    OBOE = VPO / "Woodwinds" / "oboe-NORMAL-mod-wheel.sfz"
-    CLARINET = VPO / "Woodwinds" / "clarinet-NORMAL-mod-wheel.sfz"
-    BASSOON = VPO / "Woodwinds" / "bassoon-NORMAL-mod-wheel.sfz"
+    FLUTE = VPO / "Woodwinds" / "flute-SEC-NORMAL-mod-wheel.sfz"
+    OBOE = VPO / "Woodwinds" / "oboe-SEC-NORMAL-mod-wheel.sfz"
+    CLARINET = VPO / "Woodwinds" / "clarinet-SEC-NORMAL-mod-wheel.sfz"
+    BASSOON = VPO / "Woodwinds" / "bassoon-SEC-NORMAL-mod-wheel.sfz"
 
     HORN = VPO / "Brass" / "french-horn-SEC-normal-mod-wheel.sfz"
     TRUMPET = VPO / "Brass" / "trumpet-SEC-normal-mod-wheel.sfz"
+    TRUMPET_MUTED = VPO / "Brass" / "trumpet-SEC-normal-DXF.sfz"
     TROMBONE = VPO / "Brass" / "trombone-SEC-normal-mod-wheel.sfz"
+    TUBA = VPO / "Brass" / "tuba-SOLO-normal-mod-wheel.sfz"
+    BRASS_ENSEMBLE = VPO / "Brass" / "all-brass-SEC-normal-mod-wheel.sfz"
 
-    PERCUSSION = VPO / "Percussion" / "percussion-orchestral-kit.sfz"
+    TIMPANI = VPO / "Percussion" / "timpani-hit-n-roll.sfz"
+    BASSDRUM = VPO / "Percussion" / "bassdrum.sfz"
+    CYMBALS = VPO / "Percussion" / "cymbals.sfz"
+    SNARE = VPO / "Percussion" / "snare.sfz"
+    PERCUSSION_KIT = VPO / "Percussion" / "bassdrum-snare-cymbals.sfz"
 
-    def select_instrument(program, channel):
+    def select_instrument(program, channel, track_name=""):
 
         # GM mapping
 
@@ -45,10 +58,43 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
             # Skip piano / keyboard GM programs
             return None
 
-        if channel == 9:
-            return PERCUSSION
+        # Percussion: this score spreads percussion across channels 9 AND 10
+        # (not just the strict-GM channel 9), and reuses program 47
+        # ("Timpani") for both Timpani and Cassa/bass-drum tracks -- program
+        # and channel alone can't tell them apart, so fall back to the
+        # track name.
+        if channel in (9, 10) or program == 47:
+            name = (track_name or "").lower()
 
-        if 40 <= program <= 45:
+            if "timpani" in name:
+                return TIMPANI
+
+            if (
+                "cassa" in name
+                or "bass drum" in name
+                or "bassdrum" in name
+                or "grancassa" in name
+            ):
+                return BASSDRUM
+
+            if "piatt" in name or "cymbal" in name:
+                return CYMBALS
+
+            if "snare" in name or "rullante" in name or "tamburo" in name:
+                return SNARE
+
+            return PERCUSSION_KIT
+
+        if program == 44:
+            return TREMOLO
+
+        if program == 45:
+            return PIZZICATO
+
+        if program == 46:
+            return HARP
+
+        if program in (40, 41, 42, 43, 48, 49, 50, 51):
             return STRINGS
 
         if program == 56:
@@ -57,8 +103,17 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
         if program == 57:
             return TROMBONE
 
+        if program == 58:
+            return TUBA
+
+        if program == 59:
+            return TRUMPET_MUTED
+
         if program in (60, 61):
             return HORN
+
+        if program in (62, 63):
+            return BRASS_ENSEMBLE
 
         if program == 68:
             return OBOE
@@ -90,6 +145,12 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
 
     for track_index, track in enumerate(mid.tracks):
         print(f"\nScanning track {track_index}")
+
+        track_name = ""
+        for msg in track:
+            if msg.type == "track_name":
+                track_name = msg.name
+                break
 
         current_program = 0
         current_channel = 0
@@ -126,7 +187,7 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
         for region_id, events in regions.items():
             program, channel = region_id
 
-            sfz = select_instrument(program, channel)
+            sfz = select_instrument(program, channel, track_name)
 
             if sfz is None:
                 print("Skipping piano/keyboard track", track_index)
@@ -159,9 +220,16 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
             # Copy global metadata
 
             for msg in mid.tracks[0]:
-                if msg.is_meta:
-                    if msg.type in ("set_tempo", "time_signature", "key_signature"):
-                        new_track.append(msg.copy())
+                if msg.is_meta and msg.type in ("set_tempo", "time_signature", "key_signature"):
+                        # msg.time is a delta relative to the previous message
+                        # in track 0's own sequence -- meaningless once copied
+                        # into this new, otherwise-empty track. Keeping it
+                        # would accumulate as a silent preamble before any
+                        # real note, pushing this region's audible content
+                        # later by however much time elapses between track
+                        # 0's meta messages (e.g. a meter change partway
+                        # through the piece).
+                        new_track.append(msg.copy(time=0))
 
             # rebuild delta timing
 
@@ -198,7 +266,7 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
                 temp_wav,
             ]
 
-            result = subprocess.run(command, capture_output=True, text=True)
+            result = subprocess.run(command, capture_output=True, text=True, check=True)
 
             if result.returncode != 0:
                 print(result.stderr)
@@ -225,7 +293,7 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
 
     if not rendered:
         print("Nothing rendered")
-        return
+        return None
 
     print("\nMixing", len(rendered), "layers")
 
@@ -241,6 +309,8 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
     mix.export(final_master, format="mp3", bitrate="192k")
 
     print("\nDONE:", final_master)
+
+    return mix
 
 
 if __name__ == "__main__":

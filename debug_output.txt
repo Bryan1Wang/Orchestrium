@@ -1036,3 +1036,101 @@ Tempo Marker #345 at 197.88s (Score Time) -> Speed Multiplier: 1.65x
 175.24770816769148
 
 Found 1 verified tutti rests: [(107.19342108333343, 135.82873496875007)]
+
+Intro shift: 20.881s
+Original MIDI length: 208.29 seconds
+
+Scanning track 0
+
+Scanning track 1
+Missing SFZ: C:\Users\Bryan\Downloads\Orchestrium2\orchestra-warp-backend\VPO\Woodwinds\flute-NORMAL-mod-wheel.sfz
+
+Scanning track 2
+Missing SFZ: C:\Users\Bryan\Downloads\Orchestrium2\orchestra-warp-backend\VPO\Woodwinds\oboe-NORMAL-mod-wheel.sfz
+
+Scanning track 3
+Missing SFZ: C:\Users\Bryan\Downloads\Orchestrium2\orchestra-warp-backend\VPO\Woodwinds\clarinet-NORMAL-mod-wheel.sfz
+
+Scanning track 4
+Missing SFZ: C:\Users\Bryan\Downloads\Orchestrium2\orchestra-warp-backend\VPO\Woodwinds\bassoon-NORMAL-mod-wheel.sfz
+
+Scanning track 5
+Rendering track 5 program 60 channel 5
+Rendered length: 302.36 sec
+
+Scanning track 6
+Rendering track 6 program 56 channel 6
+Rendered length: 202.35 sec
+
+Scanning track 7
+Rendering track 7 program 57 channel 7
+Rendered length: 302.36 sec
+
+Scanning track 8
+Rendering track 8 program 58 channel 8
+Rendered length: 302.36 sec
+
+Scanning track 9
+Rendering track 9 program 47 channel 10
+Rendered length: 302.38 sec
+
+Scanning track 10
+Rendering track 10 program 47 channel 10
+Rendered length: 122.09 sec
+
+Scanning track 11
+Missing SFZ: C:\Users\Bryan\Downloads\Orchestrium2\orchestra-warp-backend\VPO\Percussion\percussion-orchestral-kit.sfz
+
+Scanning track 12
+Rendering track 12 program 48 channel 11
+Rendered length: 295.32 sec
+Rendering track 12 program 45 channel 11
+Rendered length: 303.1 sec
+
+Scanning track 13
+Rendering track 13 program 48 channel 12
+Rendered length: 295.38 sec
+Rendering track 13 program 45 channel 12
+Rendered length: 303.1 sec
+
+Scanning track 14
+Rendering track 14 program 48 channel 13
+Rendered length: 295.36 sec
+Rendering track 14 program 45 channel 13
+Rendered length: 303.08 sec
+
+Scanning track 15
+Rendering track 15 program 48 channel 14
+Rendered length: 302.38 sec
+Rendering track 15 program 45 channel 14
+Rendered length: 253.85 sec
+
+Scanning track 16
+Rendering track 16 program 48 channel 15
+Rendered length: 302.36 sec
+Rendering track 16 program 45 channel 15
+Rendered length: 253.91 sec
+
+Scanning track 17
+
+Scanning track 18
+
+Scanning track 19
+
+Scanning track 20
+
+Scanning track 21
+
+Scanning track 22
+
+Scanning track 23
+
+Mixing 16 layers
+Final length: 303.1 seconds
+
+DONE: C:\Users\Bryan\Downloads\Orchestrium2\orchestra-warp-backend\data\output\orchestra_rendered.mp3
+Inserted 27.972s of silence at 108.418s (original 108.418s)
+Wrote extended audio (191.83s) to C:\Users\Bryan\Downloads\Orchestrium2\orchestra-warp-backend\data\output\REC_extended.mp3
+Entrance estimate: 4.338s, crop_time: -16.543s
+Wrote aligned solo audio to C:\Users\Bryan\Downloads\Orchestrium2\orchestra-warp-backend\data\output\REC_final.mp3
+Wrote final mix to C:\Users\Bryan\Downloads\Orchestrium2\orchestra-warp-backend\data\output\full_mix.mp3

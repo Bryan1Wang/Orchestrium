@@ -95,6 +95,42 @@ def extend_rec_pauses(rest_diagnostics, output_path=None, buffer_seconds=0.0, re
     return output_path
 
 
+def mute_and_pad_intro(audio: AudioSegment, mute_time: float, intro_shift: float) -> AudioSegment:
+    """Replace the recording's own natural lead-in (up to mute_time) with
+    clean silence, then add intro_shift more on top.
+
+    Net shift is always +intro_shift regardless of mute_time's precision --
+    trimming X seconds off the front and padding back X + intro_shift lands
+    the real content at the same position either way. mute_time only
+    controls how much of the recording's own (possibly noisy -- room tone,
+    chair creaks, count-ins) lead-in gets replaced with silence versus left
+    audible.
+    """
+    mute_time = max(0.0, mute_time)
+    trimmed = audio[round(mute_time * 1000):]
+    pad_ms = round((mute_time + intro_shift) * 1000)
+    return AudioSegment.silent(duration=pad_ms) + trimmed
+
+
+def overlay_with_gain(
+    orchestra_audio: AudioSegment,
+    solo_audio: AudioSegment,
+    orchestra_gain_db: float = 0.0,
+    solo_gain_db: float = 0.0,
+) -> AudioSegment:
+    """Mix the rendered orchestra and the soloist's recording, both already
+    aligned so position 0 in each corresponds to the same moment.
+    """
+    orchestra_audio = orchestra_audio.apply_gain(orchestra_gain_db)
+    solo_audio = solo_audio.apply_gain(solo_gain_db)
+
+    longest = max(len(orchestra_audio), len(solo_audio))
+    mix = AudioSegment.silent(duration=longest)
+    mix = mix.overlay(orchestra_audio)
+    mix = mix.overlay(solo_audio)
+    return mix
+
+
 if __name__ == "__main__":
     # Temporary: for testing this one feature in isolation. Remove once
     # trimming is wired into the real pipeline.
