@@ -1034,3 +1034,5 @@ Tempo Marker #345 at 197.88s (Score Time) -> Speed Multiplier: 1.65x
 ========================================
 
 175.24770816769148
+
+Found 1 verified tutti rests: [(107.19342108333343, 135.82873496875007)]

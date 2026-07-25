@@ -4,6 +4,7 @@ import sys
 
 import create_midi
 import find_tempo
+import rest_utils
 import score_reader
 import tempo_sync
 import transcribe
@@ -99,10 +100,19 @@ def main():
     print("=" * 40 + "\n")
     print(counter)
 
+    # Verified tutti rests need a warp curve to check expected player-time
+    # windows against -- build the plain (unshifted, unsplit) curve just for
+    # that lookup, per rest_utils.get_verified_tutti_rests's docstring.
+    plain_warp = create_midi.build_warp_curve(alignment_results)
+    tutti_rests = rest_utils.get_verified_tutti_rests(warp_time=plain_warp)
+    print(f"\nFound {len(tutti_rests)} verified tutti rests: {tutti_rests}")
+
     create_midi.make_midi(
         r"C:\Users\Bryan\Downloads\Orchestrium2\orchestra-warp-backend\data\raw\score_cropped.mid",
         alignment_results,
         r"C:\Users\Bryan\Downloads\Orchestrium2\orchestra-warp-backend\data\output\output.mid",
+        tutti_rests=tutti_rests,
+        extend_intro=True,
     )
 
 

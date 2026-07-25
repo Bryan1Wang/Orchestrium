@@ -282,6 +282,47 @@ def _fit_segment(seg_times, seg_warped, fallback_speed_before=1.0, fallback_spee
     return warp_time
 
 
+def _estimate_start_speed(good_times, good_warped, window_seconds=10.0, fallback_speed=1.0):
+    """Estimate the tempo (score-seconds per player-second) at the very
+    start of the piece, for extrapolating before the first anchor.
+
+    Instead of just the immediate next cleaned anchor, uses the farthest
+    cleaned anchor within `window_seconds` of score time from the first
+    anchor -- the secant slope over that longer span averages out one
+    atypical early note (e.g. a slightly rushed or dragged entrance)
+    instead of being fully determined by it. Falls back to the 2-anchor
+    slope when only one anchor falls in the window (i.e. the very next
+    anchor is already farther than window_seconds away), and to
+    `fallback_speed` when there's only one anchor in total.
+    """
+    if len(good_times) < 2:
+        return fallback_speed
+
+    in_window = good_times <= good_times[0] + window_seconds
+    last = np.where(in_window)[0][-1]
+    if last == 0:
+        last = 1
+
+    return (good_times[last] - good_times[0]) / (good_warped[last] - good_warped[0])
+
+
+def _compute_intro_shift(good_times, good_warped, start_speed, score_start=0.0, lead_in_seconds=1.0):
+    """Player-time shift needed so the leading intro has time to play.
+
+    Given `start_speed` (see _estimate_start_speed), estimates how long the
+    intro (from score_start to the first anchor) should naturally take, and
+    compares that to how much player time is actually available before the
+    first anchor (good_warped[0], since player time can't start before 0 --
+    the start of the recording). If the natural duration doesn't fit,
+    returns the shortfall so every anchor can be pushed forward by that
+    much. lead_in_seconds is added unconditionally on top, so there's always
+    a beat of silence before the first note even with zero shortfall.
+    """
+    natural_duration = (good_times[0] - score_start) / start_speed
+    shortfall = max(0.0, natural_duration - good_warped[0])
+    return shortfall + lead_in_seconds
+
+
 @dataclass
 class RestRecord:
     rest_start_score: float
@@ -509,6 +550,10 @@ def build_warp_curve(
     max_gap_seconds: float = 10.0,
     chunk_seconds: float = 1,
     tutti_rests=None,
+    extend_intro: bool = False,
+    score_start: float = 0.0,
+    intro_lead_in_seconds: float = 1.0,
+    start_speed_window_seconds: float = 10.0,
     return_diagnostics: Literal[False] = False,
 ) -> WarpTime: ...
 
@@ -527,9 +572,13 @@ def build_warp_curve(
     max_gap_seconds: float = 10.0,
     chunk_seconds: float = 1,
     tutti_rests=None,
+    extend_intro: bool = False,
+    score_start: float = 0.0,
+    intro_lead_in_seconds: float = 1.0,
+    start_speed_window_seconds: float = 10.0,
     *,
     return_diagnostics: Literal[True],
-) -> tuple[WarpTime, list[RestRecord] | None]: ...
+) -> tuple[WarpTime, list[RestRecord] | None, float]: ...
 
 
 def build_warp_curve(
@@ -545,8 +594,12 @@ def build_warp_curve(
     max_gap_seconds: float = 10.0,
     chunk_seconds: float = 1,
     tutti_rests=None,
+    extend_intro: bool = False,
+    score_start: float = 0.0,
+    intro_lead_in_seconds: float = 1.0,
+    start_speed_window_seconds: float = 10.0,
     return_diagnostics: bool = False,
-) -> WarpTime | tuple[WarpTime, list[RestRecord] | None]:
+) -> WarpTime | tuple[WarpTime, list[RestRecord] | None, float]:
     """Build a score_time -> player_time warp function from DTW anchors.
 
     Cleans `anchors` via _clean_anchors (dedup, outlier rejection, thinning)
@@ -560,6 +613,23 @@ def build_warp_curve(
     _build_split_warp -- and `return_diagnostics=True` additionally returns
     the list of per-rest RestRecord diagnostics (tutti_speed, natural vs.
     computed duration, shortfall, etc.) alongside warp_time.
+
+    If `extend_intro=True`, the leading intro -- from `score_start` to the
+    first cleaned anchor -- gets its full natural duration instead of
+    whatever player time was incidentally available before the first
+    anchor, plus a flat `intro_lead_in_seconds` of silence before the first
+    note either way (see _estimate_start_speed / _compute_intro_shift). The
+    intro region itself (score_time <= the first cleaned anchor) is always
+    linear/constant-speed, never the PCHIP curve -- only its speed and
+    placement change here. Everything from the first anchor onward is
+    shifted forward in player time by the same constant amount, so it
+    applies identically regardless of whether `tutti_rests` was used.
+    `return_diagnostics=True` additionally returns the computed
+    `intro_shift` (0.0 if `extend_intro=False`) as a third tuple element.
+    Note: when combined with `tutti_rests`, the returned RestRecords'
+    player_start/player_end/natural_end_player_time fields are relative to
+    the pre-shift timeline -- add `intro_shift` to them for the true final
+    player time.
     """
     good_times, good_warped = _clean_anchors(
         anchors,
@@ -577,10 +647,33 @@ def build_warp_curve(
 
     if not tutti_rests:
         warp_time = _fit_segment(good_times, good_warped)
-        return (warp_time, None) if return_diagnostics else warp_time
+        diagnostics = None
+    else:
+        warp_time, diagnostics = _build_split_warp(good_times, good_warped, tutti_rests)
 
-    warp_time, diagnostics = _build_split_warp(good_times, good_warped, tutti_rests)
-    return (warp_time, diagnostics) if return_diagnostics else warp_time
+    intro_shift = 0.0
+    if extend_intro:
+        start_speed = _estimate_start_speed(good_times, good_warped, start_speed_window_seconds)
+        intro_shift = _compute_intro_shift(
+            good_times, good_warped, start_speed, score_start, intro_lead_in_seconds
+        )
+        inner_warp_time = warp_time
+        intro_boundary = good_times[0]
+        intro_boundary_player = good_warped[0] + intro_shift
+
+        def warp_time(t, _inner=inner_warp_time, _boundary=intro_boundary,
+                       _boundary_player=intro_boundary_player, _speed=start_speed,
+                       _shift=intro_shift):
+            # Before the first anchor, use the robustly-estimated start
+            # speed directly (constant-speed line) instead of delegating to
+            # _inner, whose own edge extrapolation there is only a naive
+            # 2-anchor slope -- otherwise the shift would be sized for one
+            # speed but rendered at another.
+            if t <= _boundary:
+                return _boundary_player + (t - _boundary) / _speed
+            return _inner(t) + _shift
+
+    return (warp_time, diagnostics, intro_shift) if return_diagnostics else warp_time
 
 
 def make_midi(
@@ -598,16 +691,22 @@ def make_midi(
     max_gap_seconds=10.0,
     chunk_seconds=1,
     tutti_rests=None,
+    extend_intro=False,
+    score_start=0.0,
+    intro_lead_in_seconds=1.0,
+    start_speed_window_seconds=10.0,
 ):
     """Warp a MIDI file's timing to follow a performer.
 
     Convenience wrapper: builds a score_time -> player_time warp curve from
     `anchors` (see `build_warp_curve`; `tutti_rests`, if given, is forwarded
     so score rests are treated as constant-speed segments instead of raw
-    PCHIP), then hands it to `warp_midi_file`. If you already have a warp
-    curve built (e.g. you needed it for diagnostics or rest verification
-    first), call `warp_midi_file` directly instead of this, to avoid
-    rebuilding the same curve again.
+    PCHIP; `extend_intro`, if True, is forwarded so the leading intro gets
+    its full natural duration -- see build_warp_curve's docstring), then
+    hands it to `warp_midi_file`. If you already have a warp curve built
+    (e.g. you needed it for diagnostics or rest verification first), call
+    `warp_midi_file` directly instead of this, to avoid rebuilding the same
+    curve again.
     """
     warp_time = build_warp_curve(
         anchors,
@@ -622,6 +721,10 @@ def make_midi(
         max_gap_seconds=max_gap_seconds,
         chunk_seconds=chunk_seconds,
         tutti_rests=tutti_rests,
+        extend_intro=extend_intro,
+        score_start=score_start,
+        intro_lead_in_seconds=intro_lead_in_seconds,
+        start_speed_window_seconds=start_speed_window_seconds,
     )
     warp_midi_file(midi_path, warp_time, output_path)
 
@@ -691,3 +794,37 @@ def warp_midi_file(midi_path, warp_time, output_path):
         )
 
     new_mid.save(output_path)
+
+
+if __name__ == "__main__":
+    # Temporary: for testing the intro-shift feature in isolation. Remove
+    # once it's exercised through the real pipeline (main.py) instead.
+    import score_reader
+    import tempo_sync
+    import transcribe
+
+    sheet_music_sequence = score_reader.extract_notes()
+    player_onset_sequence = transcribe.transcribe()
+    alignment_results = tempo_sync.align(player_onset_sequence, sheet_music_sequence)
+
+    first_score_time = sheet_music_sequence[0][0]
+
+    good_times, good_warped = _clean_anchors(
+        alignment_results, 0.25, 0.07, 4.0, 10.0, 6, 0.8, 7.0, 5, 10.0, 1
+    )
+    naive_speed = (good_times[1] - good_times[0]) / (good_warped[1] - good_warped[0])
+    windowed_speed = _estimate_start_speed(good_times, good_warped)
+
+    plain_warp = build_warp_curve(alignment_results)
+    shifted_warp, _, intro_shift = build_warp_curve(
+        alignment_results, extend_intro=True, return_diagnostics=True
+    )
+
+    print(f"First score note at score time {first_score_time:.3f}s")
+    print(f"start_speed: naive (2-anchor) = {naive_speed:.4f}  windowed (10s) = {windowed_speed:.4f}")
+    print(f"intro_shift = {intro_shift:.3f}s")
+    print(f"warp_time(0)                 before={plain_warp(0):7.3f}s  after={shifted_warp(0):7.3f}s")
+    print(
+        f"warp_time(first_score_time)  before={plain_warp(first_score_time):7.3f}s  "
+        f"after={shifted_warp(first_score_time):7.3f}s"
+    )

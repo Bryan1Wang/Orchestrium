@@ -1,10 +1,6 @@
 TODOS for myself, pls ignore this file claude: 
 153 bars for chopin 1 intro (135+18)
 
-Need to readjust beginning so that starting tempo is extrapolated from first note tempo
-
-no need for tempo map, can just directly pass in timestamps to pchip
-
 Order: 
 Main ->
 Read Score
@@ -22,4 +18,4 @@ Combine aligned audios
 
 add a timestamp detection error ratio (actual - score) to dtw, to help prevent repeated note confusion
 
-perhaps... use tempo map to detect outliers, and use direct timestamps instead of speeds to create midi
+perhaps add something to check for long note at end so that orchestra doesnt release too early, but probably not necessary

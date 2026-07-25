@@ -172,7 +172,7 @@ if __name__ == "__main__":
         )
 
     if tutti_rests:
-        warp_with_rests, diagnostics = create_midi.build_warp_curve(
+        warp_with_rests, diagnostics, intro_shift = create_midi.build_warp_curve(
             alignment_results, tutti_rests=tutti_rests, return_diagnostics=True
         )
         for rec in diagnostics:
