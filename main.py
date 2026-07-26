@@ -10,6 +10,7 @@ logging.getLogger().setLevel(logging.ERROR)
 
 # import sys
 from pathlib import Path
+from typing import TypedDict
 
 from pydub import AudioSegment
 
@@ -24,9 +25,20 @@ import transcribe
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# Final mix balance -- tune by ear and re-run.
-ORCHESTRA_GAIN_DB = -4.0
-SOLO_GAIN_DB = 3.0
+
+class _CurveFitKwargs(TypedDict):
+    max_tempo_jump_pct: float
+    jump_floor_seconds: float
+    exclusion_radius_seconds: float
+    side_search_radius_seconds: float
+    side_min_points: int
+    position_outlier_floor_seconds: float
+    position_outlier_z: float
+    contiguous_run_min_points: int
+    max_gap_seconds: float
+    chunk_seconds: float
+    tempo_window_seconds: float
+    start_speed_window_seconds: float
 
 
 def midi_to_note_name(midi_num: int) -> str:
@@ -45,17 +57,60 @@ def format_note_set(note_set: set[int]) -> str:
     return f"{{{', '.join(readable_notes)}}}"
 
 
-def main():
+def run_pipeline(
+    *,
+    solo_midi_path=None,
+    orchestra_midi_path=None,
+    rec_audio_path=None,
+    output_dir=None,
+    sfizz_exe_path="sfizz_render_1.2.2.exe",
+    orchestra_gain_db=-4.0,
+    solo_gain_db=3.0,
+    min_score_rest_seconds=3.0,
+    min_recording_pause_seconds=2.0,
+    max_tempo_jump_pct=0.25,
+    jump_floor_seconds=0.07,
+    exclusion_radius_seconds=4.0,
+    side_search_radius_seconds=10.0,
+    side_min_points=6,
+    position_outlier_floor_seconds=0.8,
+    position_outlier_z=7.0,
+    contiguous_run_min_points=5,
+    max_gap_seconds=10.0,
+    chunk_seconds=1,
+    tempo_window_seconds=5.0,
+    start_speed_window_seconds=10.0,
+):
+    output_dir = Path(output_dir) if output_dir else PROJECT_ROOT / "data" / "output"
+
+    # Curve-fit knobs shared by both build_warp_curve calls below, so the
+    # rest-verification lookup curve and the final warp curve never desync.
+    curve_fit_kwargs: _CurveFitKwargs = {
+        "max_tempo_jump_pct": max_tempo_jump_pct,
+        "jump_floor_seconds": jump_floor_seconds,
+        "exclusion_radius_seconds": exclusion_radius_seconds,
+        "side_search_radius_seconds": side_search_radius_seconds,
+        "side_min_points": side_min_points,
+        "position_outlier_floor_seconds": position_outlier_floor_seconds,
+        "position_outlier_z": position_outlier_z,
+        "contiguous_run_min_points": contiguous_run_min_points,
+        "max_gap_seconds": max_gap_seconds,
+        "chunk_seconds": chunk_seconds,
+        "tempo_window_seconds": tempo_window_seconds,
+        "start_speed_window_seconds": start_speed_window_seconds,
+    }
+
     print("--- Starting Music Alignment ---")
 
     # 1. Parse the mathematically perfect sheet music score
     print("Parsing sheet music MIDI score...")
-    sheet_music_sequence = score_reader.extract_notes()
+    sheet_music_sequence = score_reader.extract_notes(solo_midi_path)
     print(f"Loaded {len(sheet_music_sequence)} chord/note events from the score.\n")
 
     # 2. Transcribe the raw audio performance using Basic Pitch
     print("Transcribing live performance audio...")
-    player_onset_sequence = transcribe.transcribe()
+    player_onset_sequence = transcribe.transcribe(rec_audio_path, output_dir=output_dir)
+    rec_midi_path = transcribe.generated_midi_path(rec_audio_path, output_dir=output_dir)
     print(f"Extracted {len(player_onset_sequence)} performance events from audio.\n")
 
     # 3. Align the performance to the score using your DTW algorithm
@@ -117,34 +172,49 @@ def main():
     # Verified tutti rests need a warp curve to check expected player-time
     # windows against -- build the plain (unshifted, unsplit) curve just for
     # that lookup, per rest_utils.get_verified_tutti_rests's docstring.
-    plain_warp = create_midi.build_warp_curve(alignment_results)
-    tutti_rests = rest_utils.get_verified_tutti_rests(warp_time=plain_warp)
+    plain_warp = create_midi.build_warp_curve(alignment_results, **curve_fit_kwargs)
+    tutti_rests = rest_utils.get_verified_tutti_rests(
+        warp_time=plain_warp,
+        min_score_rest_seconds=min_score_rest_seconds,
+        min_recording_pause_seconds=min_recording_pause_seconds,
+        solo_midi_path=solo_midi_path,
+        rec_midi_path=rec_midi_path,
+    )
     print(f"\nFound {len(tutti_rests)} verified tutti rests: {tutti_rests}")
 
-    score_path = PROJECT_ROOT / "data" / "raw" / "score_cropped.mid"
-    output_midi_path = PROJECT_ROOT / "data" / "output" / "output.mid"
+    orchestra_score_path = (
+        Path(orchestra_midi_path)
+        if orchestra_midi_path
+        else PROJECT_ROOT / "data" / "raw" / "ORCHESTRA.mid"
+    )
+    output_midi_path = output_dir / "output.mid"
 
     warp_time, diagnostics, intro_shift = create_midi.build_warp_curve(
         alignment_results,
         tutti_rests=tutti_rests,
         extend_intro=True,
         return_diagnostics=True,
+        **curve_fit_kwargs,
     )
     print(f"\nIntro shift: {intro_shift:.3f}s")
 
-    create_midi.warp_midi_file(str(score_path), warp_time, str(output_midi_path))
+    create_midi.warp_midi_file(
+        str(orchestra_score_path), warp_time, str(output_midi_path)
+    )
 
     # Render the warped MIDI to audio via sfizz.
     orchestra_audio = orchestra_player.render_precise_gm_orchestra(
-        sfizz_path="sfizz_render_1.2.2.exe",
+        sfizz_path=sfizz_exe_path,
         midi_filename=str(output_midi_path),
-        final_master_filename="data/output/orchestra_rendered.mp3",
+        final_master_filename=str(output_dir / "orchestra_rendered.mp3"),
     )
 
     # Splice real silence into the recording at each extended tutti rest.
     # RestRecord player-time fields are relative to the pre-intro-shift
     # (i.e. raw REC.mp3) timeline, so no offset adjustment is needed here.
-    extended_path = audio_utils.extend_rec_pauses(diagnostics)
+    extended_path = audio_utils.extend_rec_pauses(
+        diagnostics, rec_path=rec_audio_path, output_path=output_dir / "REC_extended.mp3"
+    )
 
     # Mute the recording's own natural lead-in (an estimate is fine here --
     # see mute_and_pad_intro's docstring) and pad back exactly enough silence
@@ -158,7 +228,7 @@ def main():
     solo_audio = audio_utils.mute_and_pad_intro(
         AudioSegment.from_mp3(extended_path), mute_time, intro_shift
     )
-    solo_final_path = PROJECT_ROOT / "data" / "output" / "REC_final.mp3"
+    solo_final_path = output_dir / "REC_final.mp3"
     solo_audio.export(solo_final_path, format="mp3")
     print(f"Wrote aligned solo audio to {solo_final_path}")
 
@@ -166,14 +236,18 @@ def main():
         final_mix = audio_utils.overlay_with_gain(
             orchestra_audio,
             solo_audio,
-            orchestra_gain_db=ORCHESTRA_GAIN_DB,
-            solo_gain_db=SOLO_GAIN_DB,
+            orchestra_gain_db=orchestra_gain_db,
+            solo_gain_db=solo_gain_db,
         )
-        final_mix_path = PROJECT_ROOT / "data" / "output" / "full_mix.mp3"
+        final_mix_path = output_dir / "full_mix.mp3"
         final_mix.export(final_mix_path, format="mp3", bitrate="192k")
         print(f"Wrote final mix to {final_mix_path}")
     else:
         print("Orchestra render produced nothing; skipping final mix.")
+
+
+def main():
+    run_pipeline()
 
 
 if __name__ == "__main__":

@@ -315,11 +315,3 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
     print("\nDONE:", final_master)
 
     return mix
-
-
-if __name__ == "__main__":
-    render_precise_gm_orchestra(
-        sfizz_path="sfizz_render_1.2.2.exe",
-        midi_filename="score_cropped.mid",
-        final_master_filename="orchestra_only_master.mp3",
-    )
