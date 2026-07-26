@@ -2,12 +2,13 @@ from pathlib import Path
 
 from pydub import AudioSegment
 
+import app_paths
 import create_midi
 import score_reader
 import tempo_sync
 import transcribe
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = app_paths.PROJECT_ROOT
 
 
 def find_intro_crop_point(buffer_seconds=1.0):
@@ -38,7 +39,7 @@ def find_intro_crop_point(buffer_seconds=1.0):
 def trim_rec_intro(output_path=None, buffer_seconds=1.0):
     rec_path = PROJECT_ROOT / "data" / "raw" / "REC.mp3"
     if output_path is None:
-        output_path = PROJECT_ROOT / "data" / "output" / "REC_trimmed.mp3"
+        output_path = app_paths.DEFAULT_OUTPUT_DIR / "REC_trimmed.mp3"
 
     crop_time = find_intro_crop_point(buffer_seconds=buffer_seconds)
 
@@ -72,7 +73,7 @@ def extend_rec_pauses(
     if rec_path is None:
         rec_path = PROJECT_ROOT / "data" / "raw" / "REC.mp3"
     if output_path is None:
-        output_path = PROJECT_ROOT / "data" / "output" / "REC_extended.mp3"
+        output_path = app_paths.DEFAULT_OUTPUT_DIR / "REC_extended.mp3"
 
     to_extend = sorted(
         (rec for rec in rest_diagnostics if rec.shortfall > 0),

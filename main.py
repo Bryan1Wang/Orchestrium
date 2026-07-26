@@ -14,6 +14,7 @@ from typing import TypedDict
 
 from pydub import AudioSegment
 
+import app_paths
 import audio_utils
 import create_midi
 import orchestra_player
@@ -22,7 +23,6 @@ import score_reader
 import tempo_sync
 import transcribe
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT_FILENAME = "OrchestriumRecording.mp3"
 
 
@@ -66,6 +66,7 @@ def run_pipeline(
     output_filename=None,
     keep_temp_files=False,
     sfizz_exe_path="sfizz_render_1.2.2.exe",
+    vpo_dir=None,
     orchestra_gain_db=-4.0,
     solo_gain_db=3.0,
     min_score_rest_seconds=3.0,
@@ -83,7 +84,7 @@ def run_pipeline(
     tempo_window_seconds=5.0,
     start_speed_window_seconds=10.0,
 ):
-    output_dir = Path(output_dir) if output_dir else PROJECT_ROOT / "data" / "output"
+    output_dir = Path(output_dir) if output_dir else app_paths.DEFAULT_OUTPUT_DIR
     output_filename = (output_filename or DEFAULT_OUTPUT_FILENAME).strip()
     if not output_filename.lower().endswith(".mp3"):
         output_filename += ".mp3"
@@ -189,7 +190,7 @@ def run_pipeline(
     orchestra_score_path = (
         Path(orchestra_midi_path)
         if orchestra_midi_path
-        else PROJECT_ROOT / "data" / "raw" / "ORCHESTRA.mid"
+        else app_paths.PROJECT_ROOT / "data" / "raw" / "ORCHESTRA.mid"
     )
     output_midi_path = output_dir / "output.mid"
 
@@ -212,6 +213,7 @@ def run_pipeline(
         sfizz_path=sfizz_exe_path,
         midi_filename=str(output_midi_path),
         final_master_filename=str(orchestra_rendered_path),
+        vpo_dir=vpo_dir,
     )
 
     # Splice real silence into the recording at each extended tutti rest.

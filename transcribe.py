@@ -5,6 +5,8 @@ import pretty_midi
 from basic_pitch import ICASSP_2022_MODEL_PATH
 from basic_pitch import inference as basic_pitch_inference
 
+import app_paths
+
 
 @contextlib.contextmanager
 def _silenced_basic_pitch_output(log_path: Path):
@@ -28,24 +30,22 @@ def generated_midi_path(audio_path=None, output_dir=None):
     the audio file's own stem, internally -- this mirrors that same formula
     so callers can locate the transcript without re-running transcribe().
     """
-    PROJECT_ROOT = Path(__file__).resolve().parent.parent
     if audio_path is None:
-        audio_path = PROJECT_ROOT / "data" / "raw" / "REC.mp3"
+        audio_path = app_paths.PROJECT_ROOT / "data" / "raw" / "REC.mp3"
     audio_path = Path(audio_path)
     if output_dir is None:
-        output_dir = PROJECT_ROOT / "data" / "output"
+        output_dir = app_paths.DEFAULT_OUTPUT_DIR
     return Path(output_dir) / f"{audio_path.stem}_basic_pitch.mid"
 
 
 def transcribe(audio_path=None, output_dir=None) -> list[tuple[float, set[int]]]:
-    PROJECT_ROOT = Path(__file__).resolve().parent.parent
     if output_dir is None:
-        output_dir = PROJECT_ROOT / "data" / "output"
+        output_dir = app_paths.DEFAULT_OUTPUT_DIR
     OUTPUT_DIR = Path(output_dir)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     if audio_path is None:
-        audio_path = PROJECT_ROOT / "data" / "raw" / "REC.mp3"
+        audio_path = app_paths.PROJECT_ROOT / "data" / "raw" / "REC.mp3"
     audio_path = Path(audio_path)
     midi_path = generated_midi_path(audio_path, OUTPUT_DIR)
     midi_path.unlink(missing_ok=True)

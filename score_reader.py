@@ -1,12 +1,11 @@
-from pathlib import Path
-
 import pretty_midi
+
+import app_paths
 
 
 def extract_notes(midi_path=None) -> list[tuple[float, set[int]]]:
     if midi_path is None:
-        PROJECT_ROOT = Path(__file__).resolve().parent.parent
-        midi_path = PROJECT_ROOT / "data" / "raw" / "solo.mid"
+        midi_path = app_paths.PROJECT_ROOT / "data" / "raw" / "solo.mid"
 
     midi_data = pretty_midi.PrettyMIDI(str(midi_path))
 

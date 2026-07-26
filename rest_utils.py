@@ -3,7 +3,9 @@ from pathlib import Path
 
 import pretty_midi
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+import app_paths
+
+PROJECT_ROOT = app_paths.PROJECT_ROOT
 
 
 def sounding_intervals_from_midi(midi_path, merge_gap_seconds=0.0):
@@ -81,7 +83,7 @@ def verify_recording_pause(
     Returns the found (gap_start, gap_end) in player-time, or None.
     """
     if rec_midi_path is None:
-        rec_midi_path = PROJECT_ROOT / "data" / "output" / "REC_basic_pitch.mid"
+        rec_midi_path = app_paths.DEFAULT_OUTPUT_DIR / "REC_basic_pitch.mid"
 
     expected_start = warp_time(rest_start_score)
     expected_end = warp_time(rest_end_score)

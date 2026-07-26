@@ -6,11 +6,12 @@ from pathlib import Path
 import mido
 from pydub import AudioSegment
 
+import app_paths
 
-def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename):
 
-    SRC_DIR = Path(__file__).resolve().parent
-    PROJECT_ROOT = SRC_DIR.parent
+def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename, vpo_dir=None):
+
+    PROJECT_ROOT = app_paths.PROJECT_ROOT
 
     sfizz_path = os.path.abspath(PROJECT_ROOT / "bin" / sfizz_path)
     if os.path.isabs(midi_filename):
@@ -25,7 +26,7 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
     # SFZ LIBRARY PATHS
     # -----------------------------
 
-    VPO = PROJECT_ROOT / "VPO"
+    VPO = Path(vpo_dir) if vpo_dir else PROJECT_ROOT / "VPO"
 
     STRINGS = VPO / "Strings" / "all-strings-SEC-normal-mod-wheel.sfz"
     PIZZICATO = VPO / "Strings" / "all-strings-SEC-pizzicato.sfz"

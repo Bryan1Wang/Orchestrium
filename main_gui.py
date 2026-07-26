@@ -31,6 +31,7 @@ _splash = _show_loading_splash()
 # Must be imported before PySide6/Qt: importing Qt first changes the Windows
 # DLL search path in a way that breaks onnxruntime's native module load
 # (basic_pitch -> onnxruntime, pulled in transitively via main -> transcribe).
+import app_paths
 import main as pipeline
 
 _splash.destroy()
@@ -55,7 +56,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = app_paths.PROJECT_ROOT
 
 # (param_name, label, kind, decimals, minimum, maximum, step)
 REST_DETECTION_SPECS = [
@@ -183,7 +184,7 @@ class MainWindow(QMainWindow):
         self.output_dir_edit = self._add_path_row(
             layout,
             "Output Folder:",
-            self._default_path("data/output"),
+            str(app_paths.DEFAULT_OUTPUT_DIR),
             is_dir=True,
         )
         self.output_filename_edit = self._add_text_row(
@@ -223,6 +224,13 @@ class MainWindow(QMainWindow):
             "Sfizz_Render Executable:",
             self._default_path("bin/sfizz_render_1.2.2.exe"),
             "Executable (*.exe)",
+        )
+
+        self.vpo_edit = self._add_path_row(
+            advanced_layout,
+            "VPO Sample Library Folder:",
+            self._default_path("VPO"),
+            is_dir=True,
         )
 
         self.keep_temp_checkbox = QCheckBox("Keep temporary/intermediate files")
@@ -328,6 +336,7 @@ class MainWindow(QMainWindow):
             "Orchestra MIDI": self.orchestra_edit.text().strip(),
             "Recording": self.rec_edit.text().strip(),
             "sfizz_render executable": self.sfizz_edit.text().strip(),
+            "VPO Sample Library Folder": self.vpo_edit.text().strip(),
         }
         for label, path in required.items():
             if not path or not Path(path).exists():
@@ -337,9 +346,9 @@ class MainWindow(QMainWindow):
                 return
 
         output_dir_text = self.output_dir_edit.text().strip()
-        if output_dir_text and not Path(output_dir_text).exists():
+        if output_dir_text and Path(output_dir_text).exists() and not Path(output_dir_text).is_dir():
             QMessageBox.warning(
-                self, "Missing input", "Output Folder path doesn't exist."
+                self, "Missing input", "Output Folder path is not a directory."
             )
             return
 
@@ -351,6 +360,7 @@ class MainWindow(QMainWindow):
             "output_filename": self.output_filename_edit.text().strip() or None,
             "keep_temp_files": self.keep_temp_checkbox.isChecked(),
             "sfizz_exe_path": required["sfizz_render executable"],
+            "vpo_dir": required["VPO Sample Library Folder"],
             "orchestra_gain_db": self.orchestra_gain_spin.value(),
             "solo_gain_db": self.solo_gain_spin.value(),
         }
