@@ -4,6 +4,37 @@ import sys
 import traceback
 from pathlib import Path
 
+
+def _show_loading_splash():
+    """A tiny tkinter box shown while `main` (and onnxruntime) import.
+
+    Uses tkinter rather than Qt because Qt must not be imported before
+    `main` (see note below) -- tkinter doesn't touch Qt's DLL search path,
+    so it can safely appear first and be torn down before PySide6 loads.
+    """
+    import tkinter as tk
+
+    splash = tk.Tk()
+    splash.overrideredirect(True)
+    width, height = 220, 70
+    screen_w = splash.winfo_screenwidth()
+    screen_h = splash.winfo_screenheight()
+    x, y = (screen_w - width) // 2, (screen_h - height) // 2
+    splash.geometry(f"{width}x{height}+{x}+{y}")
+    tk.Label(splash, text="Loading…", font=("Segoe UI", 12)).pack(expand=True, fill="both")
+    splash.update()
+    return splash
+
+
+_splash = _show_loading_splash()
+
+# Must be imported before PySide6/Qt: importing Qt first changes the Windows
+# DLL search path in a way that breaks onnxruntime's native module load
+# (basic_pitch -> onnxruntime, pulled in transitively via main -> transcribe).
+import main as pipeline
+
+_splash.destroy()
+
 from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtWidgets import (
     QApplication,
@@ -23,8 +54,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
-import main as pipeline
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
