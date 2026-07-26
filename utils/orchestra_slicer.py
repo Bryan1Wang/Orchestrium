@@ -9,7 +9,7 @@ def slice_master_score_for_orchestra(
 ):
     PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
     master_midi_path = PROJECT_ROOT / "data" / "raw" / "SCORE.mid"
-    output_path = PROJECT_ROOT / "data" / "raw" / "score_cropped.mid"
+    output_path = PROJECT_ROOT / "data" / "raw" / "ORCHESTRA.mid"
 
     mid = mido.MidiFile(str(master_midi_path))
     sliced_mid = mido.MidiFile(ticks_per_beat=mid.ticks_per_beat)

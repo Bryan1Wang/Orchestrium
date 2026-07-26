@@ -270,7 +270,14 @@ class SlicerWindow(QMainWindow):
         self.solo_label = QLabel("Solo track: (none selected)")
         layout.addWidget(self.solo_label)
 
-        range_row = QHBoxLayout()
+        self.advanced_toggle = QPushButton("▸ Advanced")
+        self.advanced_toggle.setCheckable(True)
+        self.advanced_toggle.toggled.connect(self.toggle_advanced_panel)
+        layout.addWidget(self.advanced_toggle)
+
+        self.advanced_panel = QWidget()
+        range_row = QHBoxLayout(self.advanced_panel)
+        range_row.setContentsMargins(0, 0, 0, 0)
         self.start_measure_edit = QLineEdit()
         self.start_measure_edit.setPlaceholderText("from beginning")
         self.end_measure_edit = QLineEdit()
@@ -282,7 +289,8 @@ class SlicerWindow(QMainWindow):
         range_row.addWidget(QLabel("End measure:"))
         range_row.addWidget(self.end_measure_edit)
         range_row.addWidget(full_file_btn)
-        layout.addLayout(range_row)
+        self.advanced_panel.setVisible(False)
+        layout.addWidget(self.advanced_panel)
 
         solo_row = QHBoxLayout()
         default_solo = PROJECT_ROOT / "data" / "raw" / "SOLO.mid"
@@ -297,7 +305,7 @@ class SlicerWindow(QMainWindow):
         layout.addLayout(solo_row)
 
         orch_row = QHBoxLayout()
-        default_orch = PROJECT_ROOT / "data" / "raw" / "score_cropped.mid"
+        default_orch = PROJECT_ROOT / "data" / "raw" / "ORCHESTRA.mid"
         self.orchestra_output_edit = QLineEdit(str(default_orch))
         orch_browse_btn = QPushButton("Browse…")
         orch_browse_btn.clicked.connect(
@@ -327,18 +335,24 @@ class SlicerWindow(QMainWindow):
             "MIDI files (*.mid *.midi)",
         )
         if path:
-            self.input_path_edit.setText(path)
+            self.input_path_edit.setText(str(Path(path)))
 
     def browse_output(self, line_edit):
         path, _ = QFileDialog.getSaveFileName(
             self, "Select output file", line_edit.text(), "MIDI files (*.mid *.midi)"
         )
         if path:
-            line_edit.setText(path)
+            line_edit.setText(str(Path(path)))
 
     def use_full_file(self):
         self.start_measure_edit.clear()
         self.end_measure_edit.clear()
+
+    def toggle_advanced_panel(self, checked):
+        self.advanced_panel.setVisible(checked)
+        self.advanced_toggle.setText(
+            "▾ Advanced (measure range)" if checked else "▸ Advanced (measure range)"
+        )
 
     @staticmethod
     def _collect_track_rows(mid, ticks_per_bar):
