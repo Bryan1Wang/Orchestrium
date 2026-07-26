@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
@@ -156,6 +157,12 @@ class MainWindow(QMainWindow):
             self._default_path("data/output"),
             is_dir=True,
         )
+        self.output_filename_edit = self._add_text_row(
+            layout,
+            "Output Filename:",
+            Path(pipeline.DEFAULT_OUTPUT_FILENAME).stem,
+            suffix=".mp3",
+        )
 
         gain_row = QHBoxLayout()
         self.orchestra_gain_spin = self._make_double_spin(
@@ -188,6 +195,10 @@ class MainWindow(QMainWindow):
             self._default_path("bin/sfizz_render_1.2.2.exe"),
             "Executable (*.exe)",
         )
+
+        self.keep_temp_checkbox = QCheckBox("Keep temporary/intermediate files")
+        self.keep_temp_checkbox.setChecked(False)
+        advanced_layout.addWidget(self.keep_temp_checkbox)
 
         self.advanced_spins = {}
         advanced_layout.addWidget(
@@ -235,6 +246,16 @@ class MainWindow(QMainWindow):
         row.addWidget(QLabel(label_text))
         row.addWidget(edit)
         row.addWidget(browse_btn)
+        layout.addLayout(row)
+        return edit
+
+    def _add_text_row(self, layout, label_text, default_value, suffix=None):
+        row = QHBoxLayout()
+        edit = QLineEdit(default_value)
+        row.addWidget(QLabel(label_text))
+        row.addWidget(edit)
+        if suffix:
+            row.addWidget(QLabel(suffix))
         layout.addLayout(row)
         return edit
 
@@ -298,6 +319,8 @@ class MainWindow(QMainWindow):
             "orchestra_midi_path": required["Orchestra MIDI"],
             "rec_audio_path": required["Recording"],
             "output_dir": output_dir_text or None,
+            "output_filename": self.output_filename_edit.text().strip() or None,
+            "keep_temp_files": self.keep_temp_checkbox.isChecked(),
             "sfizz_exe_path": required["sfizz_render executable"],
             "orchestra_gain_db": self.orchestra_gain_spin.value(),
             "solo_gain_db": self.solo_gain_spin.value(),

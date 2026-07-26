@@ -16,7 +16,6 @@ from pydub import AudioSegment
 
 import audio_utils
 import create_midi
-import find_tempo
 import orchestra_player
 import rest_utils
 import score_reader
@@ -24,6 +23,7 @@ import tempo_sync
 import transcribe
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_OUTPUT_FILENAME = "OrchestriumRecording.mp3"
 
 
 class _CurveFitKwargs(TypedDict):
@@ -63,6 +63,8 @@ def run_pipeline(
     orchestra_midi_path=None,
     rec_audio_path=None,
     output_dir=None,
+    output_filename=None,
+    keep_temp_files=False,
     sfizz_exe_path="sfizz_render_1.2.2.exe",
     orchestra_gain_db=-4.0,
     solo_gain_db=3.0,
@@ -82,6 +84,9 @@ def run_pipeline(
     start_speed_window_seconds=10.0,
 ):
     output_dir = Path(output_dir) if output_dir else PROJECT_ROOT / "data" / "output"
+    output_filename = (output_filename or DEFAULT_OUTPUT_FILENAME).strip()
+    if not output_filename.lower().endswith(".mp3"):
+        output_filename += ".mp3"
 
     # Curve-fit knobs shared by both build_warp_curve calls below, so the
     # rest-verification lookup curve and the final warp curve never desync.
@@ -100,7 +105,7 @@ def run_pipeline(
         "start_speed_window_seconds": start_speed_window_seconds,
     }
 
-    print("--- Starting Music Alignment ---")
+    print("Starting Music Alignment...")
 
     # 1. Parse the mathematically perfect sheet music score
     print("Parsing sheet music MIDI score...")
@@ -117,8 +122,7 @@ def run_pipeline(
     print("Aligning performance to sheet music...")
     alignment_results = tempo_sync.align(player_onset_sequence, sheet_music_sequence)
 
-    print("--- Alignment Complete! ---")
-    print("\n--- Detailed Alignment Breakdown ---")
+    print("\nAlignment Complete!")
 
     # Track counts for your summary
     matches_count = 0
@@ -150,11 +154,11 @@ def run_pipeline(
         )
     """
     print(f"\nTotal Successful Matches Synced: {matches_count}")
+    """
     # 4. Generate the tempo map
     print("\nGenerating Tempo Map...")
     tempo_map = find_tempo.map_tempo(alignment_results)
-    print(f"Generated {len(tempo_map)} tempo mapping windows.")
-    """
+    print(f"\nGenerated {len(tempo_map)} tempo mapping windows.")
     counter = 0
     prev = 0
     prev_speed = 1
@@ -180,7 +184,7 @@ def run_pipeline(
         solo_midi_path=solo_midi_path,
         rec_midi_path=rec_midi_path,
     )
-    print(f"\nFound {len(tutti_rests)} verified tutti rests: {tutti_rests}")
+    print(f"\nFound {len(tutti_rests)} verified tutti rest(s): {tutti_rests}")
 
     orchestra_score_path = (
         Path(orchestra_midi_path)
@@ -203,10 +207,11 @@ def run_pipeline(
     )
 
     # Render the warped MIDI to audio via sfizz.
+    orchestra_rendered_path = output_dir / "orchestra_rendered.mp3"
     orchestra_audio = orchestra_player.render_precise_gm_orchestra(
         sfizz_path=sfizz_exe_path,
         midi_filename=str(output_midi_path),
-        final_master_filename=str(output_dir / "orchestra_rendered.mp3"),
+        final_master_filename=str(orchestra_rendered_path),
     )
 
     # Splice real silence into the recording at each extended tutti rest.
@@ -228,9 +233,9 @@ def run_pipeline(
     solo_audio = audio_utils.mute_and_pad_intro(
         AudioSegment.from_mp3(extended_path), mute_time, intro_shift
     )
-    solo_final_path = output_dir / "REC_final.mp3"
+    solo_final_path = output_dir / "REC_trimmed.mp3"
     solo_audio.export(solo_final_path, format="mp3")
-    print(f"Wrote aligned solo audio to {solo_final_path}")
+    #print(f"Wrote aligned solo audio to {solo_final_path}")
 
     if orchestra_audio is not None:
         final_mix = audio_utils.overlay_with_gain(
@@ -239,9 +244,25 @@ def run_pipeline(
             orchestra_gain_db=orchestra_gain_db,
             solo_gain_db=solo_gain_db,
         )
-        final_mix_path = output_dir / "full_mix.mp3"
+        final_mix_path = output_dir / output_filename
         final_mix.export(final_mix_path, format="mp3", bitrate="192k")
-        print(f"Wrote final mix to {final_mix_path}")
+        print(f"\nWrote final mix to {final_mix_path}")
+
+        if not keep_temp_files:
+            temp_paths = (
+                rec_midi_path,
+                output_midi_path,
+                orchestra_rendered_path,
+                extended_path,
+                solo_final_path,
+            )
+            for temp_path in temp_paths:
+                if temp_path != final_mix_path:
+                    temp_path.unlink(missing_ok=True)
+            print(
+                "Removed intermediate files (enable 'Keep temporary/intermediate "
+                "files' to preserve them)."
+            )
     else:
         print("Orchestra render produced nothing; skipping final mix.")
 

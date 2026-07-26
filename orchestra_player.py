@@ -312,6 +312,6 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
 
     mix.export(final_master, format="mp3", bitrate="192k")
 
-    print("\nDONE:", final_master)
+    #print("\nDONE:", final_master)
 
     return mix

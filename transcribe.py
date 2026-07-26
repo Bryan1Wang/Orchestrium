@@ -1,8 +1,24 @@
+import contextlib
 from pathlib import Path
 
 import pretty_midi
 from basic_pitch import ICASSP_2022_MODEL_PATH
-from basic_pitch.inference import predict_and_save
+from basic_pitch import inference as basic_pitch_inference
+
+
+@contextlib.contextmanager
+def _silenced_basic_pitch_output(log_path: Path):
+    """Redirects basic_pitch's own stdout/stderr chatter into a log file instead
+    of showing it -- basic_pitch's status prints and any tqdm/TensorFlow warnings
+    write directly to sys.stdout/sys.stderr, so redirecting those streams (rather
+    than filtering specific known lines) is the only way to silence output from
+    code we don't control, without depending on basic_pitch's exact wording.
+    """
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "w", encoding="utf-8") as log_file, contextlib.redirect_stdout(
+        log_file
+    ), contextlib.redirect_stderr(log_file):
+        yield
 
 
 def generated_midi_path(audio_path=None, output_dir=None):
@@ -36,15 +52,16 @@ def transcribe(audio_path=None, output_dir=None) -> list[tuple[float, set[int]]]
 
     print(f"Analyzing {audio_path.name}... (This might take 10-30 seconds)")
 
-    predict_and_save(
-        audio_path_list=[str(audio_path)],
-        output_directory=str(OUTPUT_DIR),
-        save_midi=True,
-        sonify_midi=False,
-        save_model_outputs=False,
-        save_notes=False,
-        model_or_model_path=ICASSP_2022_MODEL_PATH,
-    )
+    with _silenced_basic_pitch_output(OUTPUT_DIR / "basic_pitch_console.log"):
+        basic_pitch_inference.predict_and_save(
+            audio_path_list=[str(audio_path)],
+            output_directory=str(OUTPUT_DIR),
+            save_midi=True,
+            sonify_midi=False,
+            save_model_outputs=False,
+            save_notes=False,
+            model_or_model_path=ICASSP_2022_MODEL_PATH,
+        )
 
     print("Transcription complete! Generated MIDI saved.")
 
