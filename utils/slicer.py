@@ -1,6 +1,6 @@
 from pathlib import Path
-import mido
 
+import mido
 from meta_track import crop_meta_track
 
 
