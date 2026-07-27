@@ -1,5 +1,5 @@
 TODOS for myself, pls ignore this file claude: 
-153 bars for chopin 1 intro (135+18)
+153 bars for chopin 1 intro (135+18), mendel -> 298, 154 for rach beginning
 
 Order: 
 Main ->
@@ -8,7 +8,6 @@ Transcribe
 Sync Notes (tempo_sync.py)
 Find recording rests (3s)
 Compare to score rests (1.5s)
-Create tempo map
 Adjust rests scaling factor on tempo map to avg
 Enlarge rests in recording
 Create MIDI
@@ -22,4 +21,13 @@ perhaps add something to check for long note at end so that orchestra doesnt rel
 
 add feature for tuning to other than a = 440
 
-remove unused libraries (partitura & soundfile)
+Optimize algo (SCB)
+
+Bound orchestra volume difference
+
+bug: 
+Scanning track 5
+Rendering track 5 program 60 channel 5
+Enabling freewheeling
+Assert failed: !voice->isInSisterRing()
+Assert failed at C:\Users\Bryan\Downloads\sfizz\src\sfizz\SisterVoiceRing.h:139

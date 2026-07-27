@@ -169,6 +169,25 @@ def instrument_label(program, channel):
     return f"Program {program}"
 
 
+class ClampedZoomTextEdit(QTextEdit):
+    """A QTextEdit whose built-in Ctrl+Wheel zoom is clamped to a sane range."""
+
+    MIN_POINT_SIZE = 6.0
+    MAX_POINT_SIZE = 28.0
+
+    def wheelEvent(self, event):
+        super().wheelEvent(event)
+        doc = self.document()
+        font = doc.defaultFont()
+        size = font.pointSizeF()
+        if size <= 0:
+            return
+        clamped = max(self.MIN_POINT_SIZE, min(self.MAX_POINT_SIZE, size))
+        if clamped != size:
+            font.setPointSizeF(clamped)
+            doc.setDefaultFont(font)
+
+
 class SlicerWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -266,7 +285,7 @@ class SlicerWindow(QMainWindow):
         slice_btn.clicked.connect(self.slice_score)
         layout.addWidget(slice_btn)
 
-        self.log = QTextEdit()
+        self.log = ClampedZoomTextEdit()
         self.log.setReadOnly(True)
         layout.addWidget(self.log)
 

@@ -129,6 +129,25 @@ class EmittingStream(QObject):
             self._buffer = ""
 
 
+class ClampedZoomTextEdit(QTextEdit):
+    """A QTextEdit whose built-in Ctrl+Wheel zoom is clamped to a sane range."""
+
+    MIN_POINT_SIZE = 6.0
+    MAX_POINT_SIZE = 28.0
+
+    def wheelEvent(self, event):
+        super().wheelEvent(event)
+        doc = self.document()
+        font = doc.defaultFont()
+        size = font.pointSizeF()
+        if size <= 0:
+            return
+        clamped = max(self.MIN_POINT_SIZE, min(self.MAX_POINT_SIZE, size))
+        if clamped != size:
+            font.setPointSizeF(clamped)
+            doc.setDefaultFont(font)
+
+
 class PipelineWorker(QObject):
     log_line = Signal(str)
     finished = Signal(bool, str)
@@ -269,7 +288,7 @@ class MainWindow(QMainWindow):
         self.run_button.clicked.connect(self.run_pipeline_clicked)
         layout.addWidget(self.run_button)
 
-        self.log = QTextEdit()
+        self.log = ClampedZoomTextEdit()
         self.log.setReadOnly(True)
         layout.addWidget(self.log)
 

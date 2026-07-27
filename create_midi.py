@@ -16,7 +16,14 @@ REFERENCE_TEMPO = (
 WarpTime = Callable[[float], float]
 
 
-def _detect_tempo_jumps(times, warped, max_tempo_jump_pct, jump_floor_seconds):
+def _interval_has_rest(a, b, known_rests):
+    """Whether any known (rest_start, rest_end, ...) score-time rest lies
+    fully within the score-time interval [a, b]. Extra trailing elements
+    (e.g. tutti_rests' verified_end) are ignored, so either shape works."""
+    return any(rs >= a and re <= b for rs, re, *_ in known_rests)
+
+
+def _detect_tempo_jumps(times, warped, max_tempo_jump_pct, jump_floor_seconds, known_rests=None):
     """Flag anchors where tempo changes too sharply between adjacent segments.
 
     An anchor is flagged only if the jump is both a big relative change
@@ -25,6 +32,15 @@ def _detect_tempo_jumps(times, warped, max_tempo_jump_pct, jump_floor_seconds):
     The absolute floor matters because dense/fast passages have tight anchor
     spacing, where ordinary micro-timing jitter alone is already a large
     relative change.
+
+    A genuine, already-known rest (`known_rests`, score-time (start, end)
+    pairs -- e.g. from rest_utils.find_score_rests) fully explains this same
+    signature: the secant across a held pause naturally diverges from the
+    steady tempo on either side, even though the anchor itself is a
+    perfectly legitimate DTW match. An anchor is un-flagged if either of its
+    two flanking intervals fully contains a known rest, so a real pause
+    isn't mistaken for a bad match and permanently dropped (see
+    _restore_large_gaps, which never restores a _detect_tempo_jumps flag).
     """
     rm = len(times)
     flag = np.zeros(rm, dtype=bool)
@@ -42,6 +58,15 @@ def _detect_tempo_jumps(times, warped, max_tempo_jump_pct, jump_floor_seconds):
     abs_dev = np.abs(warped[1:-1] - expected)
 
     flag[1:-1] = (log_ratio > bound) & (abs_dev > jump_floor_seconds)
+
+    if known_rests:
+        for i in range(1, rm - 1):
+            if flag[i] and (
+                _interval_has_rest(times[i - 1], times[i], known_rests)
+                or _interval_has_rest(times[i], times[i + 1], known_rests)
+            ):
+                flag[i] = False
+
     return flag
 
 
@@ -160,6 +185,7 @@ def _clean_anchors(
     contiguous_run_min_points,
     max_gap_seconds,
     chunk_seconds,
+    known_rests=None,
 ):
     """Dedup, outlier-reject, and thin raw (score_time, player_time) anchors.
 
@@ -172,6 +198,11 @@ def _clean_anchors(
     more than 2 anchors (picking the farthest pair maximizes their spacing,
     which is what keeps a curve fit through them from overfitting a
     densely-anchored span).
+
+    `known_rests`, if given (score-time (start, end) pairs, e.g. from
+    rest_utils.find_score_rests), is forwarded to _detect_tempo_jumps so an
+    anchor bordering a genuine rest isn't mistaken for a bad DTW match and
+    permanently dropped.
 
     Returns (good_times, good_warped): strictly increasing float arrays,
     length >= 1.
@@ -208,7 +239,7 @@ def _clean_anchors(
     rm = len(rep_times)
     if rm >= 3:
         jump_flag = _detect_tempo_jumps(
-            rep_times, rep_warped, max_tempo_jump_pct, jump_floor_seconds
+            rep_times, rep_warped, max_tempo_jump_pct, jump_floor_seconds, known_rests
         )
         block_flag = _detect_erratic_blocks(
             rep_times,
@@ -621,6 +652,7 @@ def build_warp_curve(
     score_start: float = 0.0,
     intro_lead_in_seconds: float = 1.0,
     start_speed_window_seconds: float = 10.0,
+    known_rests=None,
     return_diagnostics: Literal[False] = False,
 ) -> WarpTime: ...
 
@@ -644,6 +676,7 @@ def build_warp_curve(
     score_start: float = 0.0,
     intro_lead_in_seconds: float = 1.0,
     start_speed_window_seconds: float = 10.0,
+    known_rests=None,
     *,
     return_diagnostics: Literal[True],
 ) -> tuple[WarpTime, list[RestRecord] | None, float]: ...
@@ -667,6 +700,7 @@ def build_warp_curve(
     score_start: float = 0.0,
     intro_lead_in_seconds: float = 1.0,
     start_speed_window_seconds: float = 10.0,
+    known_rests=None,
     return_diagnostics: bool = False,
 ) -> WarpTime | tuple[WarpTime, list[RestRecord] | None, float]:
     """Build a score_time -> player_time warp function from DTW anchors.
@@ -709,6 +743,14 @@ def build_warp_curve(
     player_start/player_end/natural_end_player_time fields are relative to
     the pre-shift timeline -- add `intro_shift` to them for the true final
     player time.
+
+    `known_rests`, if given (score-time (start, end) pairs, e.g. from
+    rest_utils.find_score_rests -- a plain, unverified 2-tuple list is fine,
+    the same list also works if you happen to pass `tutti_rests`'s 3-tuples),
+    is forwarded to _clean_anchors so a real, held pause isn't mistaken for a
+    bad DTW match and permanently dropped by _detect_tempo_jumps (see that
+    function's docstring). This is independent of `tutti_rests`: pass it
+    even on a plain-curve call that doesn't use `tutti_rests` at all.
     """
     good_times, good_warped = _clean_anchors(
         anchors,
@@ -722,6 +764,7 @@ def build_warp_curve(
         contiguous_run_min_points,
         max_gap_seconds,
         chunk_seconds,
+        known_rests,
     )
 
     if not tutti_rests:
@@ -786,6 +829,7 @@ def make_midi(
     score_start=0.0,
     intro_lead_in_seconds=1.0,
     start_speed_window_seconds=10.0,
+    known_rests=None,
 ):
     """Warp a MIDI file's timing to follow a performer.
 
@@ -819,6 +863,7 @@ def make_midi(
         score_start=score_start,
         intro_lead_in_seconds=intro_lead_in_seconds,
         start_speed_window_seconds=start_speed_window_seconds,
+        known_rests=known_rests,
     )
     warp_midi_file(midi_path, warp_time, output_path)
 

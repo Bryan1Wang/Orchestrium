@@ -175,10 +175,19 @@ def run_pipeline(
     print("=" * 40 + "\n")
     print(counter)
     """
+    # Known score rests (score MIDI only, no recording involved) are needed
+    # by _clean_anchors so an anchor bordering a genuine held pause isn't
+    # mistaken for a bad DTW match and permanently dropped -- see
+    # create_midi._detect_tempo_jumps's docstring. Compute once and reuse for
+    # both build_warp_curve calls below.
+    known_rests = rest_utils.find_score_rests(solo_midi_path, min_score_rest_seconds)
+
     # Verified tutti rests need a warp curve to check expected player-time
     # windows against -- build the plain (unshifted, unsplit) curve just for
     # that lookup, per rest_utils.get_verified_tutti_rests's docstring.
-    plain_warp = create_midi.build_warp_curve(alignment_results, **curve_fit_kwargs)
+    plain_warp = create_midi.build_warp_curve(
+        alignment_results, known_rests=known_rests, **curve_fit_kwargs
+    )
     tutti_rests = rest_utils.get_verified_tutti_rests(
         warp_time=plain_warp,
         min_score_rest_seconds=min_score_rest_seconds,
@@ -197,6 +206,7 @@ def run_pipeline(
 
     warp_time, diagnostics, intro_shift = create_midi.build_warp_curve(
         alignment_results,
+        known_rests=known_rests,
         tutti_rests=tutti_rests,
         extend_intro=True,
         return_diagnostics=True,
@@ -259,6 +269,7 @@ def run_pipeline(
                 orchestra_rendered_path,
                 extended_path,
                 solo_final_path,
+                output_dir / "basic_pitch_console.log",
             )
             for temp_path in temp_paths:
                 if temp_path != final_mix_path:
