@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from track_crop import crop_note_track
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -166,61 +167,6 @@ def instrument_label(program, channel):
     if 0 <= program < len(GM_INSTRUMENTS):
         return GM_INSTRUMENTS[program]
     return f"Program {program}"
-
-
-def crop_note_track(track, start_tick, max_ticks):
-    """
-    Crop a single note track to [start_tick, max_ticks], shifting its first
-    event back to time 0 like slicer.py/orchestra_slicer.py do, but also
-    force-closing any notes still held down at max_ticks (ported from
-    orchestra_slicer.slice_master_score_for_orchestra) so a crop landing
-    mid-note doesn't leave a stuck/droning note -- a gap the old slicer.py
-    path (used for the solo track) didn't cover.
-    """
-    cropped = mido.MidiTrack()
-    time_accumulated = 0
-    active_notes = {}
-
-    for msg in track:
-        time_accumulated += msg.time
-
-        if time_accumulated < start_tick:
-            continue
-
-        if time_accumulated > max_ticks:
-            for channel, notes_down in active_notes.items():
-                for note in list(notes_down):
-                    cropped.append(
-                        mido.Message(
-                            "note_off",
-                            note=note,
-                            velocity=0,
-                            channel=channel,
-                            time=0,
-                        )
-                    )
-            break
-
-        if msg.type == "note_on" and msg.velocity > 0:
-            active_notes.setdefault(msg.channel, set()).add(msg.note)
-        elif (
-            (msg.type == "note_off" or (msg.type == "note_on" and msg.velocity == 0))
-            and msg.channel in active_notes
-            and msg.note in active_notes[msg.channel]
-        ):
-            active_notes[msg.channel].remove(msg.note)
-
-        if len(cropped) == 0:
-            msg_copy = msg.copy(time=int(time_accumulated - start_tick))
-        else:
-            msg_copy = msg.copy()
-
-        cropped.append(msg_copy)
-
-    if len(cropped) > 0:
-        cropped.append(mido.MetaMessage("end_of_track", time=0))
-
-    return cropped
 
 
 class SlicerWindow(QMainWindow):

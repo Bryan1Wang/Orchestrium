@@ -378,6 +378,8 @@ class RestRecord:
     natural_duration: float
     computed_duration: float
     shortfall: float
+    # The real, verified recording-pause boundary when available (see
+    # _build_split_warp), else a warp-curve estimate.
     natural_end_player_time: float
     player_start: float
     player_end: float
@@ -392,32 +394,36 @@ def _build_split_warp(good_times, good_warped, tutti_rests, tempo_window_seconds
     """
     N = len(good_times)
     raw_rests = sorted(tutti_rests, key=lambda r: r[0])
+    raw_verified_end = [r[2] if len(r) > 2 else None for r in raw_rests]
 
     # Step 1: locate each rest against good_times. A genuine score rest can
     # never contain an anchor (tempo_sync.align only anchors at real score
     # events), so right_start_idx == left_end_idx + 1 whenever both exist.
     left_end_idx = [
-        int(np.searchsorted(good_times, s, side="right")) - 1 for s, _ in raw_rests
+        int(np.searchsorted(good_times, r[0], side="right")) - 1 for r in raw_rests
     ]
     right_start_idx = [
-        int(np.searchsorted(good_times, e, side="left")) for _, e in raw_rests
+        int(np.searchsorted(good_times, r[1], side="left")) for r in raw_rests
     ]
 
     # Step 2: coalesce rests that would leave an empty solo segment between
     # them into one combined rest, so every interior segment keeps >= 1
     # anchor.
-    rests = []  # (start, end, left_end_idx, right_start_idx)
-    cur_start, cur_end = raw_rests[0]
+    rests = []  # (start, end, left_end_idx, right_start_idx, verified_end)
+    cur_start, cur_end = raw_rests[0][0], raw_rests[0][1]
     cur_le, cur_rs = left_end_idx[0], right_start_idx[0]
+    cur_verified_end = raw_verified_end[0]
     for k in range(1, len(raw_rests)):
         if cur_rs > left_end_idx[k]:
             cur_end = raw_rests[k][1]
             cur_rs = right_start_idx[k]
+            cur_verified_end = raw_verified_end[k]
         else:
-            rests.append((cur_start, cur_end, cur_le, cur_rs))
-            cur_start, cur_end = raw_rests[k]
+            rests.append((cur_start, cur_end, cur_le, cur_rs, cur_verified_end))
+            cur_start, cur_end = raw_rests[k][0], raw_rests[k][1]
             cur_le, cur_rs = left_end_idx[k], right_start_idx[k]
-    rests.append((cur_start, cur_end, cur_le, cur_rs))
+            cur_verified_end = raw_verified_end[k]
+    rests.append((cur_start, cur_end, cur_le, cur_rs, cur_verified_end))
     R = len(rests)
 
     # Step 3: edge speed just before / just after each rest, averaged over
@@ -430,7 +436,7 @@ def _build_split_warp(good_times, good_warped, tutti_rests, tempo_window_seconds
 
     tutti_speed = []
     for k in range(R):
-        _, _, le, rs = rests[k]
+        _, _, le, rs, _ = rests[k]
         before_speed = _windowed_edge_speed(
             good_times, good_warped, le, lo_bounds[k], tempo_window_seconds, forward=False
         )
@@ -462,13 +468,21 @@ def _build_split_warp(good_times, good_warped, tutti_rests, tempo_window_seconds
     shortfall = []
     natural_end_player_time = []
     for k in range(R):
-        start, end, _, _ = rests[k]
+        start, end, _, _, verified_end = rests[k]
         nd = base_warp(end) - base_warp(start)
         cd = (end - start) / tutti_speed[k]
         natural_duration.append(nd)
         computed_duration.append(cd)
         shortfall.append(max(0.0, cd - nd))
-        natural_end_player_time.append(base_warp(end))
+        # Prefer the real, verified recording-pause boundary (the actual
+        # onset of the next transcribed note, from
+        # rest_utils.verify_recording_pause) over the curve estimate --
+        # base_warp(end) can land after that onset and cause
+        # audio_utils.extend_rec_pauses to splice silence into the middle
+        # of the next note instead of before it.
+        natural_end_player_time.append(
+            verified_end if verified_end is not None else base_warp(end)
+        )
 
     # Step 5: accumulate shift forward in ascending score-time order.
     shifted_warped = good_warped.copy()
@@ -476,7 +490,7 @@ def _build_split_warp(good_times, good_warped, tutti_rests, tempo_window_seconds
     prev_right_idx = 0
     rest_records = []
     for k in range(R):
-        start, end, _, rs = rests[k]
+        start, end, _, rs, _ = rests[k]
         if rs > prev_right_idx:
             shifted_warped[prev_right_idx:rs] += running_shift
 
@@ -525,7 +539,7 @@ def _build_split_warp(good_times, good_warped, tutti_rests, tempo_window_seconds
     # symmetrically for player_end).
     segment_ranges = []
     prev = 0
-    for _, _, le, rs in rests:
+    for _, _, le, rs, _ in rests:
         segment_ranges.append((prev, le))
         prev = rs
     segment_ranges.append((prev, N - 1))
@@ -663,15 +677,21 @@ def build_warp_curve(
     outermost surviving anchors.
 
     If `tutti_rests` (a list of (rest_start_score, rest_end_score) score-time
-    pairs, e.g. from rest_utils.get_verified_tutti_rests) is given, each rest
-    is instead treated as its own constant-speed segment -- see
-    _build_split_warp -- and `return_diagnostics=True` additionally returns
-    the list of per-rest RestRecord diagnostics (tutti_speed, natural vs.
-    computed duration, shortfall, etc.) alongside warp_time. Each rest's
-    speed is estimated from up to `tempo_window_seconds` of score time on
-    either side (see _windowed_edge_speed), not just the single nearest
-    anchor pair, falling back to a narrower window near piece boundaries or
-    a neighboring rest.
+    pairs, or (rest_start_score, rest_end_score, verified_gap_end) triples --
+    e.g. from rest_utils.get_verified_tutti_rests, which returns the triple
+    form) is given, each rest is instead treated as its own constant-speed
+    segment -- see _build_split_warp -- and `return_diagnostics=True`
+    additionally returns the list of per-rest RestRecord diagnostics
+    (tutti_speed, natural vs. computed duration, shortfall, etc.) alongside
+    warp_time. When present, verified_gap_end (the real player-time boundary
+    rest_utils.verify_recording_pause found in the recording's own
+    transcription) is used as RestRecord.natural_end_player_time instead of
+    the warp curve's own estimate, since that estimate can land after the
+    next note's true onset. Each rest's speed
+    is estimated from up to `tempo_window_seconds` of score time on either
+    side (see _windowed_edge_speed), not just the single nearest anchor
+    pair, falling back to a narrower window near piece boundaries or a
+    neighboring rest.
 
     If `extend_intro=True`, the leading intro -- from `score_start` to the
     first cleaned anchor -- gets its full natural duration instead of

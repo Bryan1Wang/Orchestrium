@@ -67,6 +67,7 @@ def run_pipeline(
     keep_temp_files=False,
     sfizz_exe_path="sfizz_render_1.2.2.exe",
     vpo_dir=None,
+    skip_track=None,
     orchestra_gain_db=-4.0,
     solo_gain_db=3.0,
     min_score_rest_seconds=3.0,
@@ -214,6 +215,7 @@ def run_pipeline(
         midi_filename=str(output_midi_path),
         final_master_filename=str(orchestra_rendered_path),
         vpo_dir=vpo_dir,
+        skip_track=skip_track,
     )
 
     # Splice real silence into the recording at each extended tutti rest.

@@ -121,8 +121,13 @@ def get_verified_tutti_rests(
 
     `warp_time` should be the plain (tutti_rests=None) warp curve, e.g.
     create_midi.build_warp_curve(alignment_results). Returns the verified
-    list[(rest_start_score, rest_end_score)], ready to pass straight to
-    create_midi.build_warp_curve(alignment_results, tutti_rests=...).
+    list[(rest_start_score, rest_end_score, verified_gap_end)], ready to pass
+    straight to create_midi.build_warp_curve(alignment_results,
+    tutti_rests=...). verified_gap_end is the real player-time boundary
+    verify_recording_pause found (the actual onset of the next transcribed
+    note in the recording, or the search window's edge) -- create_midi uses
+    it as the splice point for extending the pause, instead of a warp-curve
+    estimate that can land after that onset and clip into the note.
     """
     score_rests = find_score_rests(solo_midi_path, min_score_rest_seconds)
 
@@ -144,6 +149,6 @@ def get_verified_tutti_rests(
                 f"{warp_time(rest_end_score):.2f}s"
             )
             continue
-        verified.append((rest_start_score, rest_end_score))
+        verified.append((rest_start_score, rest_end_score, match[1]))
 
     return verified

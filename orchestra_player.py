@@ -1,5 +1,6 @@
 import os
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -8,8 +9,36 @@ from pydub import AudioSegment
 
 import app_paths
 
+# Last-resort safety net -- a single per-instrument-region sfizz render
+# taking longer than this almost certainly means the render is hung (e.g. a
+# stuck note/pedal that survived slicing), not just a slow legitimate render.
+SFIZZ_RENDER_TIMEOUT_SECONDS = 1200
 
-def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename, vpo_dir=None):
+_active_process = None
+_active_process_lock = threading.Lock()
+_cancel_requested = threading.Event()
+
+
+def terminate_active_render():
+    """
+    Kill the in-flight sfizz_render subprocess (if any) and stop any further
+    regions in the current render from starting. Safe to call from another
+    thread -- this is the hook the GUI uses to make sure closing the window
+    doesn't leave an orphaned sfizz_render.exe running.
+    """
+    _cancel_requested.set()
+    with _active_process_lock:
+        proc = _active_process
+    if proc is not None and proc.poll() is None:
+        proc.kill()
+
+
+def render_precise_gm_orchestra(
+    sfizz_path, midi_filename, final_master_filename, vpo_dir=None, skip_track=None
+):
+    global _active_process
+
+    _cancel_requested.clear()
 
     PROJECT_ROOT = app_paths.PROJECT_ROOT
 
@@ -56,8 +85,8 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
         # GM mapping
 
         if 0 <= program <= 7:
-            # Skip piano / keyboard GM programs
-            return None
+            # Skip piano / keyboard GM programs or fallback to Strings
+            return STRINGS
 
         # Percussion: this score spreads percussion across channels 9 AND 10
         # (not just the strict-GM channel 9), and reuses program 47
@@ -145,6 +174,10 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
     # -----------------------------
 
     for track_index, track in enumerate(mid.tracks):
+        if skip_track is not None and track_index == skip_track:
+            print(f"Skipping track {track_index} (user-specified skip)")
+            continue
+
         print(f"\nScanning track {track_index}")
 
         track_name = ""
@@ -153,11 +186,18 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
                 track_name = msg.name
                 break
 
-        current_program = 0
-        current_channel = 0
-
+        # Each channel tracks its own current program independently -- a
+        # single track can multiplex several simultaneous instruments
+        # across channels (e.g. Violin I/II/Viola all packed into one
+        # track), and a program_change on one channel must not steal
+        # messages that belong to a different channel. A single shared
+        # "active region" here used to do exactly that: once a later
+        # channel's program_change fired, every subsequent message from
+        # an earlier channel (including its note-off) got misfiled into
+        # the wrong region, leaving one region with an unclosed note_on
+        # that sfizz would then hold open forever.
+        channel_programs = {}
         regions = {}
-        active_region = None
 
         # Create absolute timeline
 
@@ -167,16 +207,13 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
             absolute += msg.time
 
             if msg.type == "program_change":
-                current_program = msg.program
-                current_channel = msg.channel
+                channel_programs[msg.channel] = msg.program
 
-                active_region = (current_program, current_channel)
+            if not hasattr(msg, "channel"):
+                continue
 
-                if active_region not in regions:
-                    regions[active_region] = []
-
-            if active_region:
-                regions[active_region].append((absolute, msg.copy()))
+            region_id = (channel_programs.get(msg.channel, 0), msg.channel)
+            regions.setdefault(region_id, []).append((absolute, msg.copy()))
 
         if not regions:
             continue
@@ -186,6 +223,10 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
         # -----------------------------
 
         for region_id, events in regions.items():
+            if _cancel_requested.is_set():
+                print("Render cancelled")
+                return None
+
             program, channel = region_id
 
             sfz = select_instrument(program, channel, track_name)
@@ -239,6 +280,7 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
             # rebuild delta timing
 
             last_tick = 0
+            held_notes = set()
 
             for tick, msg in events:
                 copy = msg.copy()
@@ -252,45 +294,111 @@ def render_precise_gm_orchestra(sfizz_path, midi_filename, final_master_filename
                 if hasattr(copy, "channel"):
                     copy.channel = 0
 
+                if copy.type == "note_on" and copy.velocity > 0:
+                    held_notes.add(copy.note)
+                elif copy.type == "note_off" or (
+                    copy.type == "note_on" and copy.velocity == 0
+                ):
+                    held_notes.discard(copy.note)
+
                 new_track.append(copy)
+
+            # Last-resort safety net: if any note is still open at the end
+            # of this region (e.g. a note whose matching off ended up in a
+            # different region, or any other desync), force-close it and
+            # reset pedal state so sfizz doesn't hold the voice open
+            # forever. The per-channel region splitting above should
+            # prevent this in the first place -- this only catches
+            # anything that isn't accounted for by that fix.
+            if held_notes:
+                print(
+                    f"Warning: {len(held_notes)} note(s) still open at end of "
+                    f"track {track_index} program {program} channel {channel} "
+                    "-- force-closing before render."
+                )
+                for note in sorted(held_notes):
+                    new_track.append(
+                        mido.Message(
+                            "note_off", note=note, velocity=0, channel=0, time=0
+                        )
+                    )
+                for control in (64, 66, 67, 123):
+                    new_track.append(
+                        mido.Message(
+                            "control_change",
+                            control=control,
+                            value=0,
+                            channel=0,
+                            time=0,
+                        )
+                    )
 
             # DO NOT ADD MANUAL EOT
             # Mido writes it safely
 
             out.tracks.append(new_track)
 
-            out.save(temp_mid)
+            try:
+                out.save(temp_mid)
 
-            command = [
-                sfizz_path,
-                "--sfz",
-                str(sfz),
-                "--midi",
-                temp_mid,
-                "--wav",
-                temp_wav,
-            ]
+                command = [
+                    sfizz_path,
+                    "--sfz",
+                    str(sfz),
+                    "--midi",
+                    temp_mid,
+                    "--wav",
+                    temp_wav,
+                ]
 
-            result = subprocess.run(command, capture_output=True, text=True, check=True)
+                process = subprocess.Popen(
+                    command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                )
+                with _active_process_lock:
+                    _active_process = process
+                try:
+                    _, stderr = process.communicate(
+                        timeout=SFIZZ_RENDER_TIMEOUT_SECONDS
+                    )
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate()
+                    raise RuntimeError(
+                        f"sfizz_render timed out after {SFIZZ_RENDER_TIMEOUT_SECONDS}s "
+                        f"rendering track {track_index} program {program} channel "
+                        f"{channel} -- likely a stuck note or held pedal that "
+                        "survived slicing."
+                    )
+                finally:
+                    with _active_process_lock:
+                        _active_process = None
 
-            if result.returncode != 0:
-                print(result.stderr)
+                if _cancel_requested.is_set():
+                    print("Render cancelled")
+                    return None
 
-            else:
-                time.sleep(0.2)
+                if process.returncode != 0:
+                    print(stderr)
+
+                else:
+                    time.sleep(0.2)
+
+                    if os.path.exists(temp_wav):
+                        audio = AudioSegment.from_wav(temp_wav)
+
+                        print(
+                            "Rendered length:",
+                            round(audio.duration_seconds, 2),
+                            "sec",
+                        )
+
+                        rendered.append(audio)
+            finally:
+                if os.path.exists(temp_mid):
+                    os.remove(temp_mid)
 
                 if os.path.exists(temp_wav):
-                    audio = AudioSegment.from_wav(temp_wav)
-
-                    print("Rendered length:", round(audio.duration_seconds, 2), "sec")
-
-                    rendered.append(audio)
-
-            if os.path.exists(temp_mid):
-                os.remove(temp_mid)
-
-            if os.path.exists(temp_wav):
-                os.remove(temp_wav)
+                    os.remove(temp_wav)
 
     # -----------------------------
     # MIX

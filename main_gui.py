@@ -33,6 +33,7 @@ _splash = _show_loading_splash()
 # (basic_pitch -> onnxruntime, pulled in transitively via main -> transcribe).
 import app_paths
 import main as pipeline
+import orchestra_player
 
 _splash.destroy()
 
@@ -50,6 +51,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTextEdit,
     QVBoxLayout,
@@ -152,7 +154,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Orchestra Warp — Run Pipeline")
-        self.resize(860, 780)
+        available = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(860, available.width()), min(780, available.height()))
 
         self.pipeline_thread = None
         self.worker = None
@@ -160,8 +163,12 @@ class MainWindow(QMainWindow):
         defaults = inspect.signature(pipeline.run_pipeline).parameters
 
         central = QWidget()
-        self.setCentralWidget(central)
         layout = QVBoxLayout(central)
+
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(central)
+        self.setCentralWidget(scroll_area)
 
         self.solo_edit = self._add_path_row(
             layout,
@@ -237,6 +244,16 @@ class MainWindow(QMainWindow):
         self.keep_temp_checkbox.setChecked(False)
         advanced_layout.addWidget(self.keep_temp_checkbox)
 
+        skip_track_row = QHBoxLayout()
+        self.skip_track_spin = QSpinBox()
+        self.skip_track_spin.setRange(-1, 999)
+        self.skip_track_spin.setValue(-1)
+        self.skip_track_spin.setMinimumWidth(90)
+        skip_track_row.addWidget(QLabel("Skip track # (-1 = none):"))
+        skip_track_row.addWidget(self.skip_track_spin)
+        skip_track_row.addStretch()
+        advanced_layout.addLayout(skip_track_row)
+
         self.advanced_spins = {}
         advanced_layout.addWidget(
             self._build_spec_group("Rest Detection", REST_DETECTION_SPECS, defaults)
@@ -255,6 +272,42 @@ class MainWindow(QMainWindow):
         self.log = QTextEdit()
         self.log.setReadOnly(True)
         layout.addWidget(self.log)
+
+    # -- screen-size cap --------------------------------------------------
+
+    def _clamp_max_size_to_screen(self):
+        screen = self.screen()
+        if screen is None:
+            return
+        available = screen.availableGeometry()
+        self.setMaximumSize(available.width(), available.height())
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._clamp_max_size_to_screen()
+
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        self._clamp_max_size_to_screen()
+
+    def closeEvent(self, event):
+        if self.pipeline_thread is not None and self.pipeline_thread.isRunning():
+            reply = QMessageBox.question(
+                self,
+                "Pipeline running",
+                "A pipeline run is still in progress. Exit and cancel it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                return
+
+            orchestra_player.terminate_active_render()
+            self.pipeline_thread.quit()
+            self.pipeline_thread.wait(5000)
+
+        event.accept()
 
     # -- construction helpers --------------------------------------------
 
@@ -363,6 +416,7 @@ class MainWindow(QMainWindow):
             "vpo_dir": required["VPO Sample Library Folder"],
             "orchestra_gain_db": self.orchestra_gain_spin.value(),
             "solo_gain_db": self.solo_gain_spin.value(),
+            "skip_track": None if self.skip_track_spin.value() < 0 else self.skip_track_spin.value(),
         }
         for name, spin in self.advanced_spins.items():
             kwargs[name] = spin.value()

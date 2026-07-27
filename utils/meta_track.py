@@ -26,6 +26,7 @@ def crop_meta_track(track0, start_tick, max_ticks):
 
     cropped = mido.MidiTrack()
     time_accumulated = 0
+    last_appended_time = start_tick
 
     for msg in track0:
         time_accumulated += msg.time
@@ -49,11 +50,10 @@ def crop_meta_track(track0, start_tick, max_ticks):
             for carried in (last_time_sig, last_tempo, last_key_sig):
                 if carried is not None:
                     cropped.append(carried.copy(time=0))
-            msg_copy = msg.copy(time=int(time_accumulated - start_tick))
-        else:
-            msg_copy = msg.copy()
 
+        msg_copy = msg.copy(time=int(time_accumulated - last_appended_time))
         cropped.append(msg_copy)
+        last_appended_time = time_accumulated
 
     if len(cropped) == 0:
         for carried in (last_time_sig, last_tempo, last_key_sig):

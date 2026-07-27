@@ -20,5 +20,6 @@ add a timestamp detection error ratio (actual - score) to dtw, to help prevent r
 
 perhaps add something to check for long note at end so that orchestra doesnt release too early, but probably not necessary
 
+add feature for tuning to other than a = 440
 
-slashes become backslashes after selecting new file in GUI
+remove unused libraries (partitura & soundfile)

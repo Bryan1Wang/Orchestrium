@@ -2,6 +2,7 @@ from pathlib import Path
 
 import mido
 from meta_track import crop_meta_track
+from track_crop import crop_note_track
 
 
 def slice_master_score_for_orchestra(
@@ -36,58 +37,9 @@ def slice_master_score_for_orchestra(
         ):  # Skip the solo/piano track -- it's not part of the orchestra
             continue
 
-        solo_track = mido.MidiTrack()
-        time_accumulated = 0
-        active_notes = {}  # Tracks notes currently held down per channel to prevent drone loops
-
-        for msg in track:
-            time_accumulated += msg.time
-
-            # Skip everything until we hit our desired starting bar
-            if time_accumulated < start_tick:
-                continue
-
-            # Stop processing once we've grabbed our required bars
-            if time_accumulated > max_ticks:
-                # --- FIXED: FORCE CLOSE ANY STUCK NOTES AT THE BAR SPLIT ---
-                # This explicitly stops the random endless oboe/drone note
-                for channel, notes_down in active_notes.items():
-                    for note in list(notes_down):
-                        solo_track.append(
-                            mido.Message(
-                                "note_off",
-                                note=note,
-                                velocity=0,
-                                channel=channel,
-                                time=0,
-                            )
-                        )
-                break
-
-            # Maintain note states to see what is currently playing
-            if msg.type == "note_on" and msg.velocity > 0:
-                if msg.channel not in active_notes:
-                    active_notes[msg.channel] = set()
-                active_notes[msg.channel].add(msg.note)
-            elif msg.type == "note_off" or (
-                msg.type == "note_on" and msg.velocity == 0
-            ):
-                if (
-                    msg.channel in active_notes
-                    and msg.note in active_notes[msg.channel]
-                ):
-                    active_notes[msg.channel].remove(msg.note)
-
-            # Shift delta times back so the slice starts cleanly at its own time 0
-            if len(solo_track) == 0:
-                msg_copy = msg.copy(time=int(time_accumulated - start_tick))
-            else:
-                msg_copy = msg.copy()
-
-            solo_track.append(msg_copy)
+        solo_track = crop_note_track(track, start_tick, max_ticks)
 
         if len(solo_track) > 0:
-            solo_track.append(mido.MetaMessage("end_of_track", time=0))
             sliced_mid.tracks.append(solo_track)
 
     sliced_mid.save(str(output_path))

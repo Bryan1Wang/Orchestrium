@@ -2,6 +2,7 @@ from pathlib import Path
 
 import mido
 from meta_track import crop_meta_track
+from track_crop import crop_note_track
 
 
 def slice_master_score(voice_track_index=1, intro_bars=0, num_bars=10):
@@ -31,29 +32,7 @@ def slice_master_score(voice_track_index=1, intro_bars=0, num_bars=10):
     sliced_mid.tracks.append(crop_meta_track(mid.tracks[0], start_tick, max_ticks))
 
     raw_voice_track = mid.tracks[voice_track_index]
-    solo_track = mido.MidiTrack()
-
-    time_accumulated = 0
-    for msg in raw_voice_track:
-        time_accumulated += msg.time
-
-        # Skip everything until we hit our desired starting bar
-        if time_accumulated < start_tick:
-            continue
-
-        # Stop processing once we've grabbed our 10 bars
-        if time_accumulated > max_ticks:
-            break
-
-        # Shift the delta-times of the notes back so the sliced file
-        # starts cleanly at its own time 0 instead of sitting in silence
-        if len(solo_track) == 0:
-            # First note in our slice gets a delta time relative to the start of our slice
-            msg_copy = msg.copy(time=int(time_accumulated - start_tick))
-        else:
-            msg_copy = msg.copy()
-
-        solo_track.append(msg_copy)
+    solo_track = crop_note_track(raw_voice_track, start_tick, max_ticks)
 
     sliced_mid.tracks.append(solo_track)
     sliced_mid.save(str(output_path))
