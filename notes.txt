@@ -15,6 +15,8 @@ Remove intro silence, start from first note, extrapolate time of first note if n
 Synthesize orchestra
 Combine aligned audios
 
+
+TODO:
 add a timestamp detection error ratio (actual - score) to dtw, to help prevent repeated note confusion
 
 perhaps add something to check for long note at end so that orchestra doesnt release too early, but probably not necessary
@@ -31,3 +33,9 @@ Rendering track 5 program 60 channel 5
 Enabling freewheeling
 Assert failed: !voice->isInSisterRing()
 Assert failed at C:\Users\Bryan\Downloads\sfizz\src\sfizz\SisterVoiceRing.h:139
+
+remember to commit sometime fixing when no rests detected, extended rests = diagnostics or []
+
+Fix outliers being removed at rest location
+
+Fix interpolation near rests to not include cooked rests

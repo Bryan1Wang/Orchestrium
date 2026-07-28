@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from pydub import AudioSegment
 
 import app_paths
@@ -94,7 +92,7 @@ def extend_rec_pauses(
         )
 
     audio.export(output_path, format="mp3")
-    #print(f"Wrote extended audio ({audio.duration_seconds:.2f}s) to {output_path}")
+    # print(f"Wrote extended audio ({audio.duration_seconds:.2f}s) to {output_path}")
     return output_path
 
 
