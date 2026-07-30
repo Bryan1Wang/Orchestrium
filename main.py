@@ -39,6 +39,7 @@ class _CurveFitKwargs(TypedDict):
     max_gap_seconds: float
     chunk_seconds: float
     tempo_window_seconds: float
+    tempo_window_min_points: int
     start_speed_window_seconds: float
 
 
@@ -85,6 +86,7 @@ def run_pipeline(
     max_gap_seconds=10.0,
     chunk_seconds=1,
     tempo_window_seconds=5.0,
+    tempo_window_min_points=4,
     start_speed_window_seconds=10.0,
 ):
     output_dir = Path(output_dir) if output_dir else app_paths.DEFAULT_OUTPUT_DIR
@@ -107,6 +109,7 @@ def run_pipeline(
         "max_gap_seconds": max_gap_seconds,
         "chunk_seconds": chunk_seconds,
         "tempo_window_seconds": tempo_window_seconds,
+        "tempo_window_min_points": tempo_window_min_points,
         "start_speed_window_seconds": start_speed_window_seconds,
     }
 

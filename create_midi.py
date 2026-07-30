@@ -411,35 +411,55 @@ def _estimate_start_speed(
     return (good_times[last] - good_times[0]) / (good_warped[last] - good_warped[0])
 
 
-def _windowed_edge_speed(good_times, good_warped, near_idx, bound_idx, window_seconds, forward):
-    """Secant slope from `near_idx` to the farthest anchor within
-    `window_seconds` of score time on the given side, without crossing
-    `bound_idx`.
+def _windowed_edge_speed(
+    good_times, good_warped, near_idx, bound_idx, window_seconds, min_points, forward
+):
+    """Robust tempo estimate on one side of a rest: the Theil-Sen median of
+    slopes among `near_idx` and the anchors within `window_seconds` of score
+    time on the given side, without crossing `bound_idx`.
 
     Same idea as _estimate_start_speed, generalized to look in either
     direction and to respect a hard bound (so the window can't reach across
-    a neighboring rest): averaging the secant over more surrounding anchors
-    keeps one atypical note right at the rest's edge from fully determining
-    the estimate. Falls back to the immediate neighbor if nothing else
-    qualifies (e.g. the next anchor is already farther than window_seconds
-    away), and to None if there is no neighbor at all within bound_idx.
+    a neighboring rest). A single secant is sensitive to one atypical note
+    right at the rest's edge, so instead the slope is fit with
+    scipy.stats.theilslopes (the same robust estimator _detect_erratic_blocks
+    uses) over every anchor gathered on this side -- the median of all
+    pairwise slopes among those points, insensitive to any one of them being
+    an outlier (e.g. DTW having anchored a note across the rest to the wrong
+    side).
+
+    `window_seconds` alone can leave too few points for a meaningful median
+    when a rest is long and nearby anchors are sparse, so at least
+    `min_points` anchors are gathered regardless of window_seconds (falling
+    back to every anchor available up to `bound_idx` if fewer than
+    `min_points` exist there) -- the window only grows past `min_points` when
+    it naturally contains more (dense passages stay capped at
+    `window_seconds` as before). With exactly 2 points total this reduces to
+    the previous single-secant behavior. Returns None if there is no
+    neighbor at all within bound_idx.
     """
     if forward:
         if near_idx >= bound_idx or near_idx >= len(good_times) - 1:
             return None
         idxs = np.arange(near_idx + 1, bound_idx + 1)
         in_window = good_times[idxs] <= good_times[near_idx] + window_seconds
-        far = idxs[in_window][-1] if in_window.any() else idxs[0]
+        count = max(int(in_window.sum()), min(min_points, len(idxs)))
+        side_idxs = idxs[:count]
     else:
         if near_idx <= bound_idx:
             return None
         idxs = np.arange(bound_idx, near_idx)
         in_window = good_times[idxs] >= good_times[near_idx] - window_seconds
-        far = idxs[in_window][0] if in_window.any() else idxs[-1]
+        count = max(int(in_window.sum()), min(min_points, len(idxs)))
+        side_idxs = idxs[-count:]
 
-    return (good_times[near_idx] - good_times[far]) / (
-        good_warped[near_idx] - good_warped[far]
-    )
+    side_idxs = np.concatenate([[near_idx], side_idxs])
+    side_times = good_times[side_idxs]
+    side_warped = good_warped[side_idxs]
+
+    if len(side_idxs) == 2:
+        return (side_times[1] - side_times[0]) / (side_warped[1] - side_warped[0])
+    return theilslopes(side_times, side_warped).slope
 
 
 def _compute_intro_shift(
@@ -491,6 +511,7 @@ def _build_split_warp(
     max_gap_seconds,
     chunk_seconds,
     tempo_window_seconds=5.0,
+    tempo_window_min_points=4,
 ):
     """Build a warp_time() spanning the whole piece, tutti rests included,
     as a single PCHIP curve -- no constant-speed segment carve-out for
@@ -555,12 +576,15 @@ def _build_split_warp(
     rests.append((cur_start, cur_end, cur_le, cur_rs, cur_verified_end))
     R = len(rests)
 
-    # Step 3: edge speed just before / just after each rest, averaged over
-    # up to tempo_window_seconds of score time on each side (instead of a
-    # single adjacent anchor pair) so one atypical note right at the rest's
-    # edge doesn't fully determine the estimate. Bounded so the window can't
-    # reach across a neighboring rest. Estimated from the raw (uncleaned)
-    # anchors -- the tutti tempo only needs to be approximate.
+    # Step 3: edge speed just before / just after each rest, fit as the
+    # Theil-Sen median of slopes over up to tempo_window_seconds of score
+    # time on each side (at least tempo_window_min_points anchors,
+    # expanding past the time window if the rest is long and nearby anchors
+    # are sparse) instead of a single adjacent anchor pair, so one atypical
+    # or DTW-mismatched anchor right at the rest's edge doesn't fully
+    # determine the estimate. Bounded so the window can't reach across a
+    # neighboring rest. Estimated from the raw (uncleaned) anchors -- the
+    # tutti tempo only needs to be approximate.
     lo_bounds = [rests[k - 1][3] if k > 0 else 0 for k in range(R)]
     hi_bounds = [rests[k + 1][2] if k < R - 1 else N - 1 for k in range(R)]
 
@@ -579,10 +603,22 @@ def _build_split_warp(
     for k in range(R):
         start, end, le, rs, _ = rests[k]
         before_speed = _windowed_edge_speed(
-            raw_times, raw_warped, le, lo_bounds[k], tempo_window_seconds, forward=False
+            raw_times,
+            raw_warped,
+            le,
+            lo_bounds[k],
+            tempo_window_seconds,
+            tempo_window_min_points,
+            forward=False,
         )
         after_speed = _windowed_edge_speed(
-            raw_times, raw_warped, rs, hi_bounds[k], tempo_window_seconds, forward=True
+            raw_times,
+            raw_warped,
+            rs,
+            hi_bounds[k],
+            tempo_window_seconds,
+            tempo_window_min_points,
+            forward=True,
         )
         has_left = before_speed is not None and 0 <= le < N
         has_right = after_speed is not None and 0 <= rs < N
@@ -714,6 +750,7 @@ def build_warp_curve(
     chunk_seconds: float = 1,
     tutti_rests=None,
     tempo_window_seconds: float = 5.0,
+    tempo_window_min_points: int = 4,
     extend_intro: bool = False,
     score_start: float = 0.0,
     intro_lead_in_seconds: float = 1.0,
@@ -738,6 +775,7 @@ def build_warp_curve(
     chunk_seconds: float = 1,
     tutti_rests=None,
     tempo_window_seconds: float = 5.0,
+    tempo_window_min_points: int = 4,
     extend_intro: bool = False,
     score_start: float = 0.0,
     intro_lead_in_seconds: float = 1.0,
@@ -762,6 +800,7 @@ def build_warp_curve(
     chunk_seconds: float = 1,
     tutti_rests=None,
     tempo_window_seconds: float = 5.0,
+    tempo_window_min_points: int = 4,
     extend_intro: bool = False,
     score_start: float = 0.0,
     intro_lead_in_seconds: float = 1.0,
@@ -788,10 +827,12 @@ def build_warp_curve(
     in the recording's own transcription) is used as
     RestRecord.natural_end_player_time instead of the warp curve's own
     estimate, since that estimate can land after the next note's true
-    onset. Each rest's speed is estimated from up to `tempo_window_seconds`
-    of score time on either side (see _windowed_edge_speed), not just the
-    single nearest anchor pair, falling back to a narrower window near
-    piece boundaries or a neighboring rest.
+    onset. Each rest's speed is estimated as a Theil-Sen median of slopes
+    over up to `tempo_window_seconds` of score time on either side (at least
+    `tempo_window_min_points` anchors, expanding past the time window if
+    needed -- see _windowed_edge_speed), not just the single nearest anchor
+    pair, falling back to a narrower window near piece boundaries or a
+    neighboring rest.
 
     If `extend_intro=True`, the leading intro -- from `score_start` to the
     first cleaned anchor -- gets its full natural duration instead of
@@ -843,6 +884,7 @@ def build_warp_curve(
             max_gap_seconds,
             chunk_seconds,
             tempo_window_seconds,
+            tempo_window_min_points,
         )
 
     intro_shift = 0.0
@@ -896,6 +938,7 @@ def make_midi(
     chunk_seconds=1,
     tutti_rests=None,
     tempo_window_seconds=5.0,
+    tempo_window_min_points=4,
     extend_intro=False,
     score_start=0.0,
     intro_lead_in_seconds=1.0,
@@ -906,9 +949,9 @@ def make_midi(
     Convenience wrapper: builds a score_time -> player_time warp curve from
     `anchors` (see `build_warp_curve`; `tutti_rests`, if given, is forwarded
     so its rest diagnostics (tutti_speed/shortfall/etc.) are computed, with
-    `tempo_window_seconds` controlling how far the surrounding tempo
-    estimate reaches on each side; `extend_intro`, if True, is forwarded so
-    the leading intro gets its full natural duration -- see
+    `tempo_window_seconds`/`tempo_window_min_points` controlling how far the
+    surrounding tempo estimate reaches on each side; `extend_intro`, if True,
+    is forwarded so the leading intro gets its full natural duration -- see
     build_warp_curve's docstring), then hands it to `warp_midi_file`. If you
     already have a warp curve built
     (e.g. you needed it for diagnostics or rest verification first), call
@@ -930,6 +973,7 @@ def make_midi(
         chunk_seconds=chunk_seconds,
         tutti_rests=tutti_rests,
         tempo_window_seconds=tempo_window_seconds,
+        tempo_window_min_points=tempo_window_min_points,
         extend_intro=extend_intro,
         score_start=score_start,
         intro_lead_in_seconds=intro_lead_in_seconds,

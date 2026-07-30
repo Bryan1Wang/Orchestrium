@@ -27,19 +27,4 @@ Optimize algo (SCB)
 
 Bound orchestra volume difference
 
-bug: 
-Scanning track 5
-Rendering track 5 program 60 channel 5
-Enabling freewheeling
-Assert failed: !voice->isInSisterRing()
-Assert failed at C:\Users\Bryan\Downloads\sfizz\src\sfizz\SisterVoiceRing.h:139
-
-remember to commit sometime fixing when no rests detected, extended rests = diagnostics or []
-
-Fix outliers being removed at rest location
-
-Fix interpolation near rests to not include cooked rests
-
-Tempo interpolation from rests need to exclude outliers, maybe take median of data points within window...
-
 add check for output filename to not replace old files

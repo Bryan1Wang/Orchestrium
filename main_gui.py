@@ -95,6 +95,7 @@ WARP_CURVE_SPECS = [
     ("max_gap_seconds", "Max gap (s):", "float", 2, 0.0, 300.0, 0.5),
     ("chunk_seconds", "Chunk size (s):", "float", 2, 0.1, 60.0, 0.1),
     ("tempo_window_seconds", "Tempo window (s):", "float", 2, 0.1, 120.0, 0.5),
+    ("tempo_window_min_points", "Tempo window min points:", "int", 0, 1, 50, 1),
     ("start_speed_window_seconds", "Start speed window (s):", "float", 2, 0.1, 120.0, 0.5),
 ]
 
