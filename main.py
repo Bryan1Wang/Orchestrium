@@ -29,6 +29,7 @@ DEFAULT_OUTPUT_FILENAME = "OrchestriumRecording.mp3"
 class _CurveFitKwargs(TypedDict):
     max_tempo_jump_pct: float
     jump_floor_seconds: float
+    absolute_deviation_seconds: float
     exclusion_radius_seconds: float
     side_search_radius_seconds: float
     side_min_points: int
@@ -74,6 +75,7 @@ def run_pipeline(
     min_recording_pause_seconds=2.0,
     max_tempo_jump_pct=0.25,
     jump_floor_seconds=0.07,
+    absolute_deviation_seconds=1.0,
     exclusion_radius_seconds=4.0,
     side_search_radius_seconds=10.0,
     side_min_points=6,
@@ -95,6 +97,7 @@ def run_pipeline(
     curve_fit_kwargs: _CurveFitKwargs = {
         "max_tempo_jump_pct": max_tempo_jump_pct,
         "jump_floor_seconds": jump_floor_seconds,
+        "absolute_deviation_seconds": absolute_deviation_seconds,
         "exclusion_radius_seconds": exclusion_radius_seconds,
         "side_search_radius_seconds": side_search_radius_seconds,
         "side_min_points": side_min_points,
@@ -127,8 +130,8 @@ def run_pipeline(
     print("\nAlignment Complete!")
 
     # Track counts for your summary
-    matches_count = 0
     """
+    matches_count = 0
     for match_idx, (orch_time, player_time) in enumerate(alignment_results):
         # 1. Find the matching chord in the sheet music by matching the timestamp
         sheet_notes = set()
@@ -155,7 +158,7 @@ def run_pipeline(
             f"Match #{match_idx:03d} | Score: {orch_time:6.2f}s {readable_sheet:<18} -> SYNCED TO -> Player: {player_time:6.2f}s {readable_player}"
         )
     """
-    print(f"\nTotal Successful Matches Synced: {matches_count}")
+    print(f"\nTotal Successful Matches Synced: {len(alignment_results)}")
     """
     # 4. Generate the tempo map
     print("\nGenerating Tempo Map...")

@@ -77,6 +77,7 @@ REST_DETECTION_SPECS = [
 WARP_CURVE_SPECS = [
     ("max_tempo_jump_pct", "Max tempo jump (fraction):", "float", 3, 0.0, 5.0, 0.01),
     ("jump_floor_seconds", "Jump floor (s):", "float", 3, 0.0, 10.0, 0.01),
+    ("absolute_deviation_seconds", "Absolute deviation floor (s):", "float", 2, 0.0, 30.0, 0.05),
     ("exclusion_radius_seconds", "Exclusion radius (s):", "float", 2, 0.0, 120.0, 0.5),
     ("side_search_radius_seconds", "Side search radius (s):", "float", 2, 0.0, 120.0, 0.5),
     ("side_min_points", "Side min points:", "int", 0, 1, 100, 1),

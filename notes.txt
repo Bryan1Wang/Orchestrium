@@ -39,3 +39,7 @@ remember to commit sometime fixing when no rests detected, extended rests = diag
 Fix outliers being removed at rest location
 
 Fix interpolation near rests to not include cooked rests
+
+Tempo interpolation from rests need to exclude outliers, maybe take median of data points within window...
+
+add check for output filename to not replace old files

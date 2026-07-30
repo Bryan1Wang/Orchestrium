@@ -1,4 +1,3 @@
-import bisect
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, overload
@@ -14,6 +13,26 @@ REFERENCE_TEMPO = (
 )
 
 WarpTime = Callable[[float], float]
+
+
+def _neighbor_interp_deviation(times, warped):
+    """Absolute deviation of each interior anchor from where linearly
+    interpolating its two immediate neighbors would put it.
+
+    Shared by _detect_tempo_jumps (as part of its combined relative+absolute
+    check) and _detect_absolute_position_jumps (as a standalone check).
+    Returns an array aligned to `times`/`warped`, with the first/last entries
+    undefined (callers only ever index into the interior [1:-1] range).
+    """
+    return np.abs(
+        warped[1:-1]
+        - (
+            warped[:-2]
+            + (times[1:-1] - times[:-2])
+            / (times[2:] - times[:-2])
+            * (warped[2:] - warped[:-2])
+        )
+    )
 
 
 def _detect_tempo_jumps(times, warped, max_tempo_jump_pct, jump_floor_seconds):
@@ -36,12 +55,31 @@ def _detect_tempo_jumps(times, warped, max_tempo_jump_pct, jump_floor_seconds):
     log_ratio = np.abs(np.log(speed_out / speed_in))
     bound = np.log(1.0 + max_tempo_jump_pct)
 
-    expected = warped[:-2] + (times[1:-1] - times[:-2]) / (times[2:] - times[:-2]) * (
-        warped[2:] - warped[:-2]
-    )
-    abs_dev = np.abs(warped[1:-1] - expected)
+    abs_dev = _neighbor_interp_deviation(times, warped)
 
     flag[1:-1] = (log_ratio > bound) & (abs_dev > jump_floor_seconds)
+    return flag
+
+
+def _detect_absolute_position_jumps(times, warped, absolute_deviation_seconds):
+    """Flag anchors whose position deviates from linear interpolation of
+    their immediate neighbors by more than absolute_deviation_seconds, in
+    absolute terms, regardless of the relative tempo change.
+
+    Independent of (not gated by) _detect_tempo_jumps's relative check --
+    catches an anchor that lands an implausible amount away from its
+    neighbor-implied position even where the surrounding tempo is loose/slow
+    enough that the same absolute error doesn't clear max_tempo_jump_pct in
+    relative terms (e.g. anchors spanning a long tutti rest, where a large
+    score-time gap dilutes any relative-percentage comparison).
+    """
+    rm = len(times)
+    flag = np.zeros(rm, dtype=bool)
+    if rm < 3:
+        return flag
+
+    abs_dev = _neighbor_interp_deviation(times, warped)
+    flag[1:-1] = abs_dev > absolute_deviation_seconds
     return flag
 
 
@@ -148,33 +186,14 @@ def _restore_large_gaps(times, jump_flag, keep, max_gap_seconds):
     return keep
 
 
-def _clean_anchors(
-    anchors,
-    max_tempo_jump_pct,
-    jump_floor_seconds,
-    exclusion_radius_seconds,
-    side_search_radius_seconds,
-    side_min_points,
-    position_outlier_floor_seconds,
-    position_outlier_z,
-    contiguous_run_min_points,
-    max_gap_seconds,
-    chunk_seconds,
-):
-    """Dedup, outlier-reject, and thin raw (score_time, player_time) anchors.
+def _dedup_anchors(anchors):
+    """Dedup raw (score_time, player_time) anchors.
 
-    `anchors` is deduplicated by score_time (last wins), then collapsed so
-    no two anchors share a player_time (ties would otherwise force a flat
-    plateau into any curve fit through them). Outliers are then dropped by
-    _detect_tempo_jumps and _detect_erratic_blocks, gaps left too large by
-    that are partly closed by _restore_large_gaps, and the survivors are
-    thinned by chunk_seconds so no chunk_seconds span of score-time keeps
-    more than 2 anchors (picking the farthest pair maximizes their spacing,
-    which is what keeps a curve fit through them from overfitting a
-    densely-anchored span).
+    Deduplicated by score_time (last wins), then collapsed so no two
+    anchors share a player_time (ties would otherwise force a flat plateau
+    into any curve fit through them).
 
-    Returns (good_times, good_warped): strictly increasing float arrays,
-    length >= 1.
+    Returns (times, warped): strictly increasing float arrays, length >= 1.
     """
     unique = {}
     for s, y in anchors:
@@ -189,30 +208,54 @@ def _clean_anchors(
     if n == 1:
         return score_times, player_times
 
-    m = n
-    distinct = np.empty(m, dtype=bool)
+    distinct = np.empty(n, dtype=bool)
     distinct[0] = True
     distinct[1:] = player_times[1:] != player_times[:-1]
-    cand_times = score_times[distinct]
-    cand_warped = player_times[distinct]
+    return score_times[distinct], player_times[distinct]
 
-    if len(cand_times) < 2:
-        # Nothing left to build a curve from -- flat pass-through pinned at
-        # the one surviving anchor.
-        return cand_times, cand_warped
 
-    rep_times = cand_times
-    rep_warped = cand_warped
+def _reject_and_thin(
+    times,
+    warped,
+    max_tempo_jump_pct,
+    jump_floor_seconds,
+    absolute_deviation_seconds,
+    exclusion_radius_seconds,
+    side_search_radius_seconds,
+    side_min_points,
+    position_outlier_floor_seconds,
+    position_outlier_z,
+    contiguous_run_min_points,
+    max_gap_seconds,
+    chunk_seconds,
+):
+    """Outlier-reject and thin already-deduped (times, warped) anchors.
 
-    rep_keep = np.ones(len(rep_times), dtype=bool)
-    rm = len(rep_times)
-    if rm >= 3:
+    Outliers are dropped by _detect_tempo_jumps, _detect_absolute_position_jumps,
+    and _detect_erratic_blocks, gaps left too large by that are partly closed
+    by _restore_large_gaps, and the survivors are thinned by chunk_seconds so
+    no chunk_seconds span of score-time keeps more than 2 anchors (picking
+    the farthest pair maximizes their spacing, which is what keeps a curve
+    fit through them from overfitting a densely-anchored span).
+
+    Returns (good_times, good_warped, keep_mask): keep_mask is a boolean
+    array aligned to the input `times`/`warped`.
+    """
+    n = len(times)
+    if n < 2:
+        return times, warped, np.ones(n, dtype=bool)
+
+    rep_keep = np.ones(n, dtype=bool)
+    if n >= 3:
         jump_flag = _detect_tempo_jumps(
-            rep_times, rep_warped, max_tempo_jump_pct, jump_floor_seconds
+            times, warped, max_tempo_jump_pct, jump_floor_seconds
+        )
+        abs_flag = _detect_absolute_position_jumps(
+            times, warped, absolute_deviation_seconds
         )
         block_flag = _detect_erratic_blocks(
-            rep_times,
-            rep_warped,
+            times,
+            warped,
             exclusion_radius_seconds,
             side_search_radius_seconds,
             side_min_points,
@@ -221,18 +264,20 @@ def _clean_anchors(
             contiguous_run_min_points,
         )
 
-        rep_keep = ~(jump_flag | block_flag)
+        rep_keep = ~(jump_flag | abs_flag | block_flag)
         rep_keep[0] = True
         rep_keep[-1] = True
 
-        rep_keep = _restore_large_gaps(rep_times, jump_flag, rep_keep, max_gap_seconds)
+        rep_keep = _restore_large_gaps(
+            times, jump_flag | abs_flag, rep_keep, max_gap_seconds
+        )
 
     # Thin dense clusters: keep each survivor, then jump to the farthest
     # surviving point still within chunk_seconds (or the next one if none
     # are in range), dropping everything between.
     survivors = np.where(rep_keep)[0]
     if len(survivors) > 2:
-        survivor_times = rep_times[survivors]
+        survivor_times = times[survivors]
         keep_survivor = np.zeros(len(survivors), dtype=bool)
         keep_survivor[0] = True
         pos = 0
@@ -244,10 +289,56 @@ def _clean_anchors(
             keep_survivor[far] = True
             pos = far
 
-        rep_keep = np.zeros(len(rep_times), dtype=bool)
+        rep_keep = np.zeros(n, dtype=bool)
         rep_keep[survivors[keep_survivor]] = True
 
-    return rep_times[rep_keep], rep_warped[rep_keep]
+    return times[rep_keep], warped[rep_keep], rep_keep
+
+
+def _clean_anchors(
+    anchors,
+    max_tempo_jump_pct,
+    jump_floor_seconds,
+    absolute_deviation_seconds,
+    exclusion_radius_seconds,
+    side_search_radius_seconds,
+    side_min_points,
+    position_outlier_floor_seconds,
+    position_outlier_z,
+    contiguous_run_min_points,
+    max_gap_seconds,
+    chunk_seconds,
+):
+    """Dedup, outlier-reject, and thin raw (score_time, player_time) anchors.
+
+    Thin wrapper around _dedup_anchors + _reject_and_thin -- see those two
+    for the actual algorithm.
+
+    Returns (good_times, good_warped): strictly increasing float arrays,
+    length >= 1.
+    """
+    times, warped = _dedup_anchors(anchors)
+    if len(times) < 2:
+        # Nothing left to build a curve from -- flat pass-through pinned at
+        # the one surviving anchor.
+        return times, warped
+
+    good_times, good_warped, _ = _reject_and_thin(
+        times,
+        warped,
+        max_tempo_jump_pct,
+        jump_floor_seconds,
+        absolute_deviation_seconds,
+        exclusion_radius_seconds,
+        side_search_radius_seconds,
+        side_min_points,
+        position_outlier_floor_seconds,
+        position_outlier_z,
+        contiguous_run_min_points,
+        max_gap_seconds,
+        chunk_seconds,
+    )
+    return good_times, good_warped
 
 
 def _fit_segment(
@@ -385,25 +476,63 @@ class RestRecord:
     player_end: float
 
 
-def _build_split_warp(good_times, good_warped, tutti_rests, tempo_window_seconds=5.0):
-    """Build a warp_time() that treats each tutti rest as a constant-speed
-    segment instead of letting a single PCHIP curve interpolate through it.
+def _build_split_warp(
+    anchors,
+    tutti_rests,
+    max_tempo_jump_pct,
+    jump_floor_seconds,
+    absolute_deviation_seconds,
+    exclusion_radius_seconds,
+    side_search_radius_seconds,
+    side_min_points,
+    position_outlier_floor_seconds,
+    position_outlier_z,
+    contiguous_run_min_points,
+    max_gap_seconds,
+    chunk_seconds,
+    tempo_window_seconds=5.0,
+):
+    """Build a warp_time() spanning the whole piece, tutti rests included,
+    as a single PCHIP curve -- no constant-speed segment carve-out for
+    rests, and no synthetic rest-boundary anchors.
 
-    See create_midi's module-level design notes (plan doc) for the full
-    algorithm; summarized inline at each step below.
+    Each rest's tutti_speed/boundary/shortfall is still estimated from the
+    raw (deduped but not yet cleaned) anchors -- the tutti tempo only needs
+    to be approximate, so it's fine to estimate it before cleaning -- and
+    still returned via RestRecord for audio_utils.extend_rec_pauses to know
+    how much silence to splice into the recording. But instead of treating
+    each rest as its own constant-speed segment (which required forcing a
+    synthetic anchor at each boundary into the cleaning pool -- a synthetic
+    point derived directly from the anchor bordering the rest, which made
+    that anchor's own badness tautologically self-consistent and immune to
+    outlier detection), the computed shortfall is applied as a plain shift
+    to the real anchors after each rest, and the whole shifted set is
+    cleaned and fit with one ordinary PCHIP curve, exactly like the
+    no-tutti_rests path. A real anchor bordering a rest is now judged
+    against its own real neighbors like any other anchor -- nothing
+    synthetic to hide behind.
+
+    Accepted trade-off: PCHIP's derivative at a knot depends on the secants
+    to both neighbors (Fritsch-Carlson), so the tempo curve immediately
+    around a rest's edges can be mildly influenced by the pace across the
+    whole rest rather than purely local tempo. This is a known, deliberate
+    trade for simplicity and for avoiding the self-referential-anchor
+    problem above -- not something this function tries to eliminate.
     """
-    N = len(good_times)
+    raw_times, raw_warped = _dedup_anchors(anchors)
+    N = len(raw_times)
     raw_rests = sorted(tutti_rests, key=lambda r: r[0])
     raw_verified_end = [r[2] if len(r) > 2 else None for r in raw_rests]
 
-    # Step 1: locate each rest against good_times. A genuine score rest can
-    # never contain an anchor (tempo_sync.align only anchors at real score
-    # events), so right_start_idx == left_end_idx + 1 whenever both exist.
+    # Step 1: locate each rest against raw_times (pre-cleaning). A genuine
+    # score rest can never contain an anchor (tempo_sync.align only anchors
+    # at real score events), so right_start_idx == left_end_idx + 1 whenever
+    # both exist.
     left_end_idx = [
-        int(np.searchsorted(good_times, r[0], side="right")) - 1 for r in raw_rests
+        int(np.searchsorted(raw_times, r[0], side="right")) - 1 for r in raw_rests
     ]
     right_start_idx = [
-        int(np.searchsorted(good_times, r[1], side="left")) for r in raw_rests
+        int(np.searchsorted(raw_times, r[1], side="left")) for r in raw_rests
     ]
 
     # Step 2: coalesce rests that would leave an empty solo segment between
@@ -430,7 +559,8 @@ def _build_split_warp(good_times, good_warped, tutti_rests, tempo_window_seconds
     # up to tempo_window_seconds of score time on each side (instead of a
     # single adjacent anchor pair) so one atypical note right at the rest's
     # edge doesn't fully determine the estimate. Bounded so the window can't
-    # reach across a neighboring rest.
+    # reach across a neighboring rest. Estimated from the raw (uncleaned)
+    # anchors -- the tutti tempo only needs to be approximate.
     lo_bounds = [rests[k - 1][3] if k > 0 else 0 for k in range(R)]
     hi_bounds = [rests[k + 1][2] if k < R - 1 else N - 1 for k in range(R)]
 
@@ -449,18 +579,18 @@ def _build_split_warp(good_times, good_warped, tutti_rests, tempo_window_seconds
     for k in range(R):
         start, end, le, rs, _ = rests[k]
         before_speed = _windowed_edge_speed(
-            good_times, good_warped, le, lo_bounds[k], tempo_window_seconds, forward=False
+            raw_times, raw_warped, le, lo_bounds[k], tempo_window_seconds, forward=False
         )
         after_speed = _windowed_edge_speed(
-            good_times, good_warped, rs, hi_bounds[k], tempo_window_seconds, forward=True
+            raw_times, raw_warped, rs, hi_bounds[k], tempo_window_seconds, forward=True
         )
         has_left = before_speed is not None and 0 <= le < N
         has_right = after_speed is not None and 0 <= rs < N
 
         if has_left:
-            left_boundary.append(good_warped[le] + (start - good_times[le]) / before_speed)
+            left_boundary.append(raw_warped[le] + (start - raw_times[le]) / before_speed)
         if has_right:
-            right_boundary.append(good_warped[rs] - (good_times[rs] - end) / after_speed)
+            right_boundary.append(raw_warped[rs] - (raw_times[rs] - end) / after_speed)
 
         if has_left and has_right:
             assert before_speed is not None and after_speed is not None
@@ -478,11 +608,11 @@ def _build_split_warp(good_times, good_warped, tutti_rests, tempo_window_seconds
             )
             tutti_speed.append(1.0)
             # No anchor on either side at all -- only possible if every
-            # anchor on that entire side of the rest was rejected during
-            # cleaning. Nothing to extrapolate from; treat the rest as
+            # anchor on that entire side of the rest is missing from the raw
+            # pool. Nothing to extrapolate from; treat the rest as
             # zero-width at whatever player-time is otherwise in scope.
-            fallback = good_warped[le] if 0 <= le < N else (
-                good_warped[rs] if 0 <= rs < N else good_warped[0]
+            fallback = raw_warped[le] if 0 <= le < N else (
+                raw_warped[rs] if 0 <= rs < N else raw_warped[0]
             )
             left_boundary.append(fallback)
             right_boundary.append(fallback)
@@ -511,15 +641,16 @@ def _build_split_warp(good_times, good_warped, tutti_rests, tempo_window_seconds
             verified_end if verified_end is not None else right_boundary[k]
         )
 
-    # Step 5: accumulate shift forward in ascending score-time order.
-    shifted_warped = good_warped.copy()
+    # Step 5: accumulate shift forward in ascending score-time order, over
+    # the raw (not yet cleaned) player-time array.
+    shifted_raw_warped = raw_warped.copy()
     running_shift = 0.0
     prev_right_idx = 0
     rest_records = []
     for k in range(R):
         start, end, _, rs, _ = rests[k]
         if rs > prev_right_idx:
-            shifted_warped[prev_right_idx:rs] += running_shift
+            shifted_raw_warped[prev_right_idx:rs] += running_shift
 
         player_start = left_boundary[k] + running_shift
         player_end = player_start + natural_duration[k] + shortfall[k]
@@ -542,91 +673,29 @@ def _build_split_warp(good_times, good_warped, tutti_rests, tempo_window_seconds
         prev_right_idx = rs
 
     if prev_right_idx < N:
-        shifted_warped[prev_right_idx:] += running_shift
+        shifted_raw_warped[prev_right_idx:] += running_shift
 
-    # Step 6: build one _fit_segment closure per solo segment (the anchor
-    # ranges between consecutive rests). Each segment gets its bordering
-    # rest's own boundary value(s) -- not just a fallback speed -- spliced
-    # in as real knots. This is required for correctness, not just a nicety:
-    # segment_funcs[i] is fit only from this segment's own local anchors, so
-    # its derivative at its edge knot (computed from local data only)
-    # generally disagrees with the one-sided extrapolation Step 3b used to
-    # derive the neighboring rest's player_start/player_end (which is
-    # deliberately built the same way, from only this segment's own nearest
-    # anchor -- see Step 3b). Without an explicit shared knot,
-    # segment_funcs[i]'s own edge extrapolation can still overshoot past the
-    # rest's boundary value, and the rest's closed-form linear interpolation
-    # then drops back down to it -- a real decrease, which the downstream
-    # MIDI tick conversion correctly rejects. Splicing the rest's own value
-    # in as a knot guarantees exact continuity by construction; monotonicity
-    # follows because PCHIP preserves monotonicity of its input data, and
-    # player_start/player_end are provably on the correct side of this
-    # segment's adjacent real anchors (player_start = left_boundary[k] +
-    # running_shift > good_warped[le] since before_speed > 0 and
-    # good_times[le] < rest_start, and symmetrically for player_end).
-    segment_ranges = []
-    prev = 0
-    for _, _, le, rs, _ in rests:
-        segment_ranges.append((prev, le))
-        prev = rs
-    segment_ranges.append((prev, N - 1))
+    # Step 6: clean the shifted anchors (dedup already done above) and fit
+    # one PCHIP curve across the whole piece, exactly like the
+    # no-tutti_rests path -- no synthetic anchors, no segment split.
+    good_times, good_warped, _ = _reject_and_thin(
+        raw_times,
+        shifted_raw_warped,
+        max_tempo_jump_pct,
+        jump_floor_seconds,
+        absolute_deviation_seconds,
+        exclusion_radius_seconds,
+        side_search_radius_seconds,
+        side_min_points,
+        position_outlier_floor_seconds,
+        position_outlier_z,
+        contiguous_run_min_points,
+        max_gap_seconds,
+        chunk_seconds,
+    )
+    warp_time = _fit_segment(good_times, good_warped)
 
-    segment_funcs = {}
-    for i, (lo, hi) in enumerate(segment_ranges):
-        if lo <= hi:
-            seg_times = list(good_times[lo : hi + 1])
-            seg_warped = list(shifted_warped[lo : hi + 1])
-        else:
-            seg_times, seg_warped = [], []  # edge segment with no real anchors
-
-        # Skip splicing in a boundary knot if it wouldn't be strictly beyond
-        # this segment's own adjacent real anchor (possible only in the
-        # degenerate case of a zero-duration gap between a note's onset and
-        # a rest boundary) -- PCHIP requires strictly increasing x, and the
-        # real anchor already covers that exact score_time.
-        if i > 0:
-            prev_rest = rest_records[i - 1]
-            if not seg_times or prev_rest.rest_end_score < seg_times[0]:
-                seg_times.insert(0, prev_rest.rest_end_score)
-                seg_warped.insert(0, prev_rest.player_end)
-        if i < R:
-            next_rest = rest_records[i]
-            if not seg_times or next_rest.rest_start_score > seg_times[-1]:
-                seg_times.append(next_rest.rest_start_score)
-                seg_warped.append(next_rest.player_start)
-
-        border_before = tutti_speed[i - 1] if i > 0 else None
-        border_after = tutti_speed[i] if i < R else None
-        fb = border_before if border_before is not None else (border_after or 1.0)
-        fa = border_after if border_after is not None else (border_before or 1.0)
-
-        segment_funcs[i] = _fit_segment(
-            np.array(seg_times), np.array(seg_warped), fb, fa
-        )
-
-    # Step 7: dispatch. Score times inside a rest use the rest's own
-    # closed-form linear interpolation; everything else delegates to the
-    # enclosing solo segment. Every segment index 0..R now has a func
-    # (each borders at least one rest, so it has at least that rest's own
-    # boundary point as a knot), so no separate edge-of-piece fallback is
-    # needed here -- _fit_segment's own 1-point extrapolation branch
-    # already covers a piece that starts or ends inside a rest.
-    rest_starts = [r.rest_start_score for r in rest_records]
-    rest_ends = [r.rest_end_score for r in rest_records]
-
-    def warp_time(score_time):
-        k = bisect.bisect_right(rest_starts, score_time) - 1
-        if k >= 0 and score_time <= rest_ends[k]:
-            r = rest_records[k]
-            span = r.rest_end_score - r.rest_start_score
-            if span <= 0:
-                return r.player_start
-            frac = (score_time - r.rest_start_score) / span
-            return r.player_start + frac * (r.player_end - r.player_start)
-
-        return segment_funcs[k + 1](score_time)
-
-    return warp_time, rest_records
+    return warp_time, rest_records, good_times, good_warped
 
 
 @overload
@@ -634,6 +703,7 @@ def build_warp_curve(
     anchors,
     max_tempo_jump_pct: float = 0.25,
     jump_floor_seconds: float = 0.07,
+    absolute_deviation_seconds: float = 1.0,
     exclusion_radius_seconds: float = 4.0,
     side_search_radius_seconds: float = 10.0,
     side_min_points: int = 6,
@@ -657,6 +727,7 @@ def build_warp_curve(
     anchors,
     max_tempo_jump_pct: float = 0.25,
     jump_floor_seconds: float = 0.07,
+    absolute_deviation_seconds: float = 1.0,
     exclusion_radius_seconds: float = 4.0,
     side_search_radius_seconds: float = 10.0,
     side_min_points: int = 6,
@@ -680,6 +751,7 @@ def build_warp_curve(
     anchors,
     max_tempo_jump_pct: float = 0.25,
     jump_floor_seconds: float = 0.07,
+    absolute_deviation_seconds: float = 1.0,
     exclusion_radius_seconds: float = 4.0,
     side_search_radius_seconds: float = 10.0,
     side_min_points: int = 6,
@@ -706,19 +778,20 @@ def build_warp_curve(
     If `tutti_rests` (a list of (rest_start_score, rest_end_score) score-time
     pairs, or (rest_start_score, rest_end_score, verified_gap_end) triples --
     e.g. from rest_utils.get_verified_tutti_rests, which returns the triple
-    form) is given, each rest is instead treated as its own constant-speed
-    segment -- see _build_split_warp -- and `return_diagnostics=True`
-    additionally returns the list of per-rest RestRecord diagnostics
-    (tutti_speed, natural vs. computed duration, shortfall, etc.) alongside
-    warp_time. When present, verified_gap_end (the real player-time boundary
-    rest_utils.verify_recording_pause found in the recording's own
-    transcription) is used as RestRecord.natural_end_player_time instead of
-    the warp curve's own estimate, since that estimate can land after the
-    next note's true onset. Each rest's speed
-    is estimated from up to `tempo_window_seconds` of score time on either
-    side (see _windowed_edge_speed), not just the single nearest anchor
-    pair, falling back to a narrower window near piece boundaries or a
-    neighboring rest.
+    form) is given, each rest's tutti_speed/boundary/shortfall is still
+    estimated and returned via `return_diagnostics=True`'s per-rest
+    RestRecord list (tutti_speed, natural vs. computed duration, shortfall,
+    etc.) -- see _build_split_warp -- but the curve itself is still a
+    single PCHIP spanning the whole piece, rests included; a rest is not
+    treated as its own constant-speed segment. When present, verified_gap_end
+    (the real player-time boundary rest_utils.verify_recording_pause found
+    in the recording's own transcription) is used as
+    RestRecord.natural_end_player_time instead of the warp curve's own
+    estimate, since that estimate can land after the next note's true
+    onset. Each rest's speed is estimated from up to `tempo_window_seconds`
+    of score time on either side (see _windowed_edge_speed), not just the
+    single nearest anchor pair, falling back to a narrower window near
+    piece boundaries or a neighboring rest.
 
     If `extend_intro=True`, the leading intro -- from `score_start` to the
     first cleaned anchor -- gets its full natural duration instead of
@@ -737,26 +810,39 @@ def build_warp_curve(
     the pre-shift timeline -- add `intro_shift` to them for the true final
     player time.
     """
-    good_times, good_warped = _clean_anchors(
-        anchors,
-        max_tempo_jump_pct,
-        jump_floor_seconds,
-        exclusion_radius_seconds,
-        side_search_radius_seconds,
-        side_min_points,
-        position_outlier_floor_seconds,
-        position_outlier_z,
-        contiguous_run_min_points,
-        max_gap_seconds,
-        chunk_seconds,
-    )
-
     if not tutti_rests:
+        good_times, good_warped = _clean_anchors(
+            anchors,
+            max_tempo_jump_pct,
+            jump_floor_seconds,
+            absolute_deviation_seconds,
+            exclusion_radius_seconds,
+            side_search_radius_seconds,
+            side_min_points,
+            position_outlier_floor_seconds,
+            position_outlier_z,
+            contiguous_run_min_points,
+            max_gap_seconds,
+            chunk_seconds,
+        )
         warp_time = _fit_segment(good_times, good_warped)
         diagnostics = None
     else:
-        warp_time, diagnostics = _build_split_warp(
-            good_times, good_warped, tutti_rests, tempo_window_seconds
+        warp_time, diagnostics, good_times, good_warped = _build_split_warp(
+            anchors,
+            tutti_rests,
+            max_tempo_jump_pct,
+            jump_floor_seconds,
+            absolute_deviation_seconds,
+            exclusion_radius_seconds,
+            side_search_radius_seconds,
+            side_min_points,
+            position_outlier_floor_seconds,
+            position_outlier_z,
+            contiguous_run_min_points,
+            max_gap_seconds,
+            chunk_seconds,
+            tempo_window_seconds,
         )
 
     intro_shift = 0.0
@@ -799,6 +885,7 @@ def make_midi(
     output_path,
     max_tempo_jump_pct=0.25,
     jump_floor_seconds=0.07,
+    absolute_deviation_seconds=1.0,
     exclusion_radius_seconds=4.0,
     side_search_radius_seconds=10.0,
     side_min_points=6,
@@ -818,10 +905,10 @@ def make_midi(
 
     Convenience wrapper: builds a score_time -> player_time warp curve from
     `anchors` (see `build_warp_curve`; `tutti_rests`, if given, is forwarded
-    so score rests are treated as constant-speed segments instead of raw
-    PCHIP, with `tempo_window_seconds` controlling how far the surrounding
-    tempo estimate reaches on each side; `extend_intro`, if True, is
-    forwarded so the leading intro gets its full natural duration -- see
+    so its rest diagnostics (tutti_speed/shortfall/etc.) are computed, with
+    `tempo_window_seconds` controlling how far the surrounding tempo
+    estimate reaches on each side; `extend_intro`, if True, is forwarded so
+    the leading intro gets its full natural duration -- see
     build_warp_curve's docstring), then hands it to `warp_midi_file`. If you
     already have a warp curve built
     (e.g. you needed it for diagnostics or rest verification first), call
@@ -832,6 +919,7 @@ def make_midi(
         anchors,
         max_tempo_jump_pct=max_tempo_jump_pct,
         jump_floor_seconds=jump_floor_seconds,
+        absolute_deviation_seconds=absolute_deviation_seconds,
         exclusion_radius_seconds=exclusion_radius_seconds,
         side_search_radius_seconds=side_search_radius_seconds,
         side_min_points=side_min_points,
