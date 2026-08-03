@@ -67,6 +67,7 @@ def run_pipeline(
     output_dir=None,
     output_filename=None,
     keep_temp_files=False,
+    polyphony_detection=False,
     sfizz_exe_path="sfizz_render_1.2.2.exe",
     vpo_dir=None,
     skip_track=None,
@@ -128,7 +129,9 @@ def run_pipeline(
 
     # 3. Align the performance to the score using your DTW algorithm
     print("Aligning performance to sheet music...")
-    alignment_results = tempo_sync.align(player_onset_sequence, sheet_music_sequence)
+    alignment_results = tempo_sync.align(
+        player_onset_sequence, sheet_music_sequence, polyphony_detection=polyphony_detection
+    )
 
     print("\nAlignment Complete!")
 

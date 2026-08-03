@@ -235,6 +235,9 @@ class MainWindow(QMainWindow):
         gain_row.addWidget(self.orchestra_gain_spin)
         gain_row.addWidget(QLabel("Solo Gain (dB):"))
         gain_row.addWidget(self.solo_gain_spin)
+        self.polyphony_checkbox = QCheckBox("Polyphony Detection")
+        self.polyphony_checkbox.setChecked(False)
+        gain_row.addWidget(self.polyphony_checkbox)
         gain_row.addStretch()
         layout.addLayout(gain_row)
 
@@ -437,6 +440,7 @@ class MainWindow(QMainWindow):
             "vpo_dir": required["VPO Sample Library Folder"],
             "orchestra_gain_db": self.orchestra_gain_spin.value(),
             "solo_gain_db": self.solo_gain_spin.value(),
+            "polyphony_detection": self.polyphony_checkbox.isChecked(),
             "skip_track": None if self.skip_track_spin.value() < 0 else self.skip_track_spin.value(),
         }
         for name, spin in self.advanced_spins.items():

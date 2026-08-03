@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal, overload
+from typing import Literal, cast, overload
 
 import mido
 import numpy as np
@@ -459,7 +459,8 @@ def _windowed_edge_speed(
 
     if len(side_idxs) == 2:
         return (side_times[1] - side_times[0]) / (side_warped[1] - side_warped[0])
-    return theilslopes(side_times, side_warped).slope
+    slope, _, _, _ = theilslopes(side_times, side_warped)
+    return cast(float, slope)
 
 
 def _compute_intro_shift(
@@ -517,21 +518,29 @@ def _build_split_warp(
     as a single PCHIP curve -- no constant-speed segment carve-out for
     rests, and no synthetic rest-boundary anchors.
 
-    Each rest's tutti_speed/boundary/shortfall is still estimated from the
-    raw (deduped but not yet cleaned) anchors -- the tutti tempo only needs
-    to be approximate, so it's fine to estimate it before cleaning -- and
-    still returned via RestRecord for audio_utils.extend_rec_pauses to know
-    how much silence to splice into the recording. But instead of treating
-    each rest as its own constant-speed segment (which required forcing a
-    synthetic anchor at each boundary into the cleaning pool -- a synthetic
-    point derived directly from the anchor bordering the rest, which made
-    that anchor's own badness tautologically self-consistent and immune to
-    outlier detection), the computed shortfall is applied as a plain shift
-    to the real anchors after each rest, and the whole shifted set is
-    cleaned and fit with one ordinary PCHIP curve, exactly like the
-    no-tutti_rests path. A real anchor bordering a rest is now judged
-    against its own real neighbors like any other anchor -- nothing
-    synthetic to hide behind.
+    Each rest's tutti_speed/boundary/shortfall is estimated from a
+    preliminary, throwaway outlier-rejection pass over the deduped anchors
+    (see the Step 2.5 comment below) rather than the fully raw anchors --
+    the near-side anchor bordering a rest is used directly as the
+    boundary's extrapolation origin, so it needs to have already survived
+    outlier rejection, or a single bad DTW match right at a rest's edge
+    (e.g. a repeated note matched to the wrong occurrence) silently
+    inflates that rest's computed shortfall. This preliminary cleaning is
+    only used for these diagnostics, though, and is discarded immediately
+    after -- it is still returned via RestRecord for
+    audio_utils.extend_rec_pauses to know how much silence to splice into
+    the recording. But instead of treating each rest as its own
+    constant-speed segment (which required forcing a synthetic anchor at
+    each boundary into the cleaning pool -- a synthetic point derived
+    directly from the anchor bordering the rest, which made that anchor's
+    own badness tautologically self-consistent and immune to outlier
+    detection), the computed shortfall is applied as a plain shift to the
+    real (raw, uncleaned) anchors after each rest, and the whole shifted
+    set is independently cleaned from scratch and fit with one ordinary
+    PCHIP curve, exactly like the no-tutti_rests path. A real anchor
+    bordering a rest is judged against its own real neighbors like any
+    other anchor when the actual curve is fit -- nothing synthetic to hide
+    behind, and nothing carried over from the preliminary pass above.
 
     Accepted trade-off: PCHIP's derivative at a knot depends on the secants
     to both neighbors (Fritsch-Carlson), so the tempo curve immediately
@@ -576,6 +585,42 @@ def _build_split_warp(
     rests.append((cur_start, cur_end, cur_le, cur_rs, cur_verified_end))
     R = len(rests)
 
+    # Step 2.5: a preliminary, throwaway outlier-rejection pass over the
+    # full raw anchor set, used only to make Step 3's boundary/speed
+    # estimates below more trustworthy -- it does NOT feed the real curve
+    # fit in Step 6, which independently re-cleans the raw (shifted)
+    # anchors from scratch, so outlier rejection still runs "for real" on
+    # uncleaned data later. It's needed here because _windowed_edge_speed's
+    # Theil-Sen slope is only robust to noise *within* its window -- the
+    # near-side anchor bordering the rest is still used directly, below, as
+    # the extrapolation origin, so if that one anchor is itself a bad DTW
+    # match (e.g. a repeated note across the rest matched to the wrong
+    # occurrence), the boundary comes out wrong regardless of how robust
+    # the slope estimate is.
+    prelim_times, prelim_warped, _ = _reject_and_thin(
+        raw_times,
+        raw_warped,
+        max_tempo_jump_pct,
+        jump_floor_seconds,
+        absolute_deviation_seconds,
+        exclusion_radius_seconds,
+        side_search_radius_seconds,
+        side_min_points,
+        position_outlier_floor_seconds,
+        position_outlier_z,
+        contiguous_run_min_points,
+        max_gap_seconds,
+        chunk_seconds,
+    )
+    Np = len(prelim_times)
+    prelim_le = [
+        int(np.searchsorted(prelim_times, rests[k][0], side="right")) - 1
+        for k in range(R)
+    ]
+    prelim_rs = [
+        int(np.searchsorted(prelim_times, rests[k][1], side="left")) for k in range(R)
+    ]
+
     # Step 3: edge speed just before / just after each rest, fit as the
     # Theil-Sen median of slopes over up to tempo_window_seconds of score
     # time on each side (at least tempo_window_min_points anchors,
@@ -583,10 +628,13 @@ def _build_split_warp(
     # are sparse) instead of a single adjacent anchor pair, so one atypical
     # or DTW-mismatched anchor right at the rest's edge doesn't fully
     # determine the estimate. Bounded so the window can't reach across a
-    # neighboring rest. Estimated from the raw (uncleaned) anchors -- the
-    # tutti tempo only needs to be approximate.
-    lo_bounds = [rests[k - 1][3] if k > 0 else 0 for k in range(R)]
-    hi_bounds = [rests[k + 1][2] if k < R - 1 else N - 1 for k in range(R)]
+    # neighboring rest. Estimated from the preliminarily-cleaned anchors
+    # (Step 2.5) rather than the raw ones -- the tutti tempo only needs to
+    # be approximate, but the near-side anchor itself is trusted directly
+    # (see Step 3b), so it needs to have already survived outlier
+    # rejection.
+    lo_bounds = [prelim_rs[k - 1] if k > 0 else 0 for k in range(R)]
+    hi_bounds = [prelim_le[k + 1] if k < R - 1 else Np - 1 for k in range(R)]
 
     # Step 3b: boundary player-times, extrapolated one-sided from before_speed
     # /after_speed above -- never a curve spanning the rest. A single PCHIP
@@ -601,10 +649,11 @@ def _build_split_warp(
     left_boundary = []
     right_boundary = []
     for k in range(R):
-        start, end, le, rs, _ = rests[k]
+        start, end, _, _, _ = rests[k]
+        le, rs = prelim_le[k], prelim_rs[k]
         before_speed = _windowed_edge_speed(
-            raw_times,
-            raw_warped,
+            prelim_times,
+            prelim_warped,
             le,
             lo_bounds[k],
             tempo_window_seconds,
@@ -612,21 +661,25 @@ def _build_split_warp(
             forward=False,
         )
         after_speed = _windowed_edge_speed(
-            raw_times,
-            raw_warped,
+            prelim_times,
+            prelim_warped,
             rs,
             hi_bounds[k],
             tempo_window_seconds,
             tempo_window_min_points,
             forward=True,
         )
-        has_left = before_speed is not None and 0 <= le < N
-        has_right = after_speed is not None and 0 <= rs < N
+        has_left = before_speed is not None and 0 <= le < Np
+        has_right = after_speed is not None and 0 <= rs < Np
 
         if has_left:
-            left_boundary.append(raw_warped[le] + (start - raw_times[le]) / before_speed)
+            left_boundary.append(
+                prelim_warped[le] + (start - prelim_times[le]) / before_speed
+            )
         if has_right:
-            right_boundary.append(raw_warped[rs] - (raw_times[rs] - end) / after_speed)
+            right_boundary.append(
+                prelim_warped[rs] - (prelim_times[rs] - end) / after_speed
+            )
 
         if has_left and has_right:
             assert before_speed is not None and after_speed is not None
@@ -644,11 +697,12 @@ def _build_split_warp(
             )
             tutti_speed.append(1.0)
             # No anchor on either side at all -- only possible if every
-            # anchor on that entire side of the rest is missing from the raw
-            # pool. Nothing to extrapolate from; treat the rest as
+            # anchor on that entire side of the rest was dropped by the
+            # preliminary cleaning pass (or was already missing from the
+            # raw pool). Nothing to extrapolate from; treat the rest as
             # zero-width at whatever player-time is otherwise in scope.
-            fallback = raw_warped[le] if 0 <= le < N else (
-                raw_warped[rs] if 0 <= rs < N else raw_warped[0]
+            fallback = prelim_warped[le] if 0 <= le < Np else (
+                prelim_warped[rs] if 0 <= rs < Np else raw_warped[0]
             )
             left_boundary.append(fallback)
             right_boundary.append(fallback)

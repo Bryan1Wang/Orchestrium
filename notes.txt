@@ -25,6 +25,15 @@ add feature for tuning to other than a = 440
 
 Optimize algo (SCB)
 
+make slicer also use app paths
+
 Bound orchestra volume difference
 
 add check for output filename to not replace old files
+
+fix overly slow tuttis
+
+add checkbox for monotonic instruments to not give partial credit to octave mismatch
+
+need preliminary outlier detection on each side of rest window
+left and right boundary is cooked (~0), speed on right could be cooked too

@@ -1,9 +1,41 @@
-def getAccuracy(notes: set[int], player: set[int]):
+ANCHOR_THRESHOLD = 0.5  # kept in sync with align()'s `if err <= 0.5` gate below
+
+# Worst (highest) penalty that still barely clears ANCHOR_THRESHOLD when the
+# player chord has no other notes alongside the octave-shifted one -- see
+# getAccuracy's single-note octave-tolerance branch. Deliberately not more
+# forgiving than this: a lower penalty would make an octave-tolerant guess an
+# attractively cheap cell in align()'s DTW cost matrix, letting it pull the
+# optimal path toward it even where a real match was available nearby.
+OCTAVE_MISS_PENALTY = ANCHOR_THRESHOLD / 0.8
+
+
+def getAccuracy(notes: set[int], player: set[int], polyphony_detection: bool = False):
     if not notes or not player:
         if notes == player:
             return 0.0
         else:
             return 1.0
+
+    if len(notes) == 1:
+        (n,) = notes
+        if n in player:
+            matched = {n}
+            missing = 0.0
+        else:
+            octave_match = (
+                next((p for p in player if p % 12 == n % 12), None)
+                if polyphony_detection
+                else None
+            )
+            if octave_match is not None:
+                matched = {octave_match}
+                missing = OCTAVE_MISS_PENALTY
+            else:
+                matched = set()
+                missing = 1.0
+        extra = len(player - matched) / len(player)
+        return missing * 0.8 + extra * 0.2
+
     acc = (len(notes - player)) / len(notes) * 0.8 + (
         len(player - notes) / len(player)
     ) * 0.2
@@ -11,7 +43,9 @@ def getAccuracy(notes: set[int], player: set[int]):
 
 
 def align(
-    player_data: list[tuple[float, set[int]]], notes_data: list[tuple[float, set[int]]]
+    player_data: list[tuple[float, set[int]]],
+    notes_data: list[tuple[float, set[int]]],
+    polyphony_detection: bool = False,
 ) -> list[tuple[float, float]]:
     player = [n[1] for n in player_data]
     notes = [n[1] for n in notes_data]
@@ -22,9 +56,9 @@ def align(
 
     for j in range(1, len(player) + 1):
         for i in range(1, len(notes) + 1):
-            diff[i][j] = getAccuracy(notes[i - 1], player[j - 1]) + min(
-                diff[i - 1][j], diff[i][j - 1], diff[i - 1][j - 1]
-            )
+            diff[i][j] = getAccuracy(
+                notes[i - 1], player[j - 1], polyphony_detection
+            ) + min(diff[i - 1][j], diff[i][j - 1], diff[i - 1][j - 1])
 
     temp = diff[len(notes)][len(player)]
     idxP = len(player)
@@ -59,7 +93,7 @@ def align(
     path.reverse()
     best = {}
     for n, p in path:
-        err = getAccuracy(notes[n], player[p])
+        err = getAccuracy(notes[n], player[p], polyphony_detection)
         if err <= 0.5:
             if n not in best:
                 best[n] = (p, err)
