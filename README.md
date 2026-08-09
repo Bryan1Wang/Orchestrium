@@ -45,4 +45,4 @@ Orchestrium wouldn't be possible without these open tools and libraries:
 
 - [Basic Pitch](https://github.com/spotify/basic-pitch) (Spotify) — audio-to-MIDI transcription
 - [sfizz](https://sfz.tools/sfizz/) — SFZ sample-based audio synthesis
-- [Versilian Studios](https://vis.versilstudios.com/) sample libraries — orchestral instrument sounds
+- [Virtual Playing Orchestra (VPO)](http://virtualplaying.com/) — free orchestral sample library, by Paul Battersby
