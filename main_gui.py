@@ -38,6 +38,7 @@ import orchestra_player
 _splash.destroy()
 
 from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -59,6 +60,16 @@ from PySide6.QtWidgets import (
 )
 
 PROJECT_ROOT = app_paths.PROJECT_ROOT
+
+
+def _load_app_icon() -> QIcon:
+    """The user drops their own icon.ico/png in assets/ -- until then, no-op."""
+    for name in ("icon.ico", "icon.png"):
+        icon_path = PROJECT_ROOT / "assets" / name
+        if icon_path.exists():
+            return QIcon(str(icon_path))
+    return QIcon()
+
 
 # (param_name, label, kind, decimals, minimum, maximum, step)
 REST_DETECTION_SPECS = [
@@ -112,6 +123,183 @@ WARP_CURVE_SPECS = [
     ("tempo_window_min_points", "Tempo window min points:", "int", 0, 1, 50, 1),
     ("start_speed_window_seconds", "Start speed window (s):", "float", 2, 0.1, 120.0, 0.5),
 ]
+
+
+DARK_ORANGE_STYLESHEET = """
+QWidget {
+    background-color: #1e1c1a;
+    color: #f2ede8;
+    font-size: 10pt;
+}
+
+QMainWindow, QScrollArea, QAbstractScrollArea {
+    background-color: #1e1c1a;
+    border: none;
+}
+
+QLabel {
+    background: transparent;
+    color: #f2ede8;
+}
+
+QGroupBox {
+    background-color: #262320;
+    border: 1px solid #3d3833;
+    border-radius: 6px;
+    margin-top: 14px;
+    padding: 10px 8px 8px 8px;
+    font-weight: 600;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 10px;
+    padding: 0 4px;
+    color: #ff8c1a;
+}
+
+QPushButton {
+    background-color: #ff8c1a;
+    color: #1e1c1a;
+    border: none;
+    border-radius: 5px;
+    padding: 6px 14px;
+    font-weight: 600;
+}
+
+QPushButton:hover {
+    background-color: #ff9f40;
+}
+
+QPushButton:pressed {
+    background-color: #e67512;
+}
+
+QPushButton:disabled {
+    background-color: #5a544d;
+    color: #b8b0a8;
+}
+
+QPushButton:checkable:checked {
+    background-color: #e67512;
+}
+
+QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox {
+    background-color: #2f2b27;
+    color: #f2ede8;
+    border: 1px solid #3d3833;
+    border-radius: 4px;
+    padding: 3px 6px;
+    selection-background-color: #ff8c1a;
+    selection-color: #1e1c1a;
+}
+
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 1px solid #ff8c1a;
+}
+
+QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {
+    color: #b8b0a8;
+    background-color: #262320;
+}
+
+QCheckBox {
+    spacing: 8px;
+}
+
+QCheckBox::indicator {
+    width: 15px;
+    height: 15px;
+    border: 1px solid #3d3833;
+    border-radius: 3px;
+    background-color: #2f2b27;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ff8c1a;
+    border: 1px solid #ff8c1a;
+}
+
+QCheckBox::indicator:hover {
+    border: 1px solid #ff8c1a;
+}
+
+QScrollBar:vertical {
+    background: #1e1c1a;
+    width: 12px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #5a544d;
+    border-radius: 5px;
+    min-height: 24px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #ff8c1a;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+QScrollBar:horizontal {
+    background: #1e1c1a;
+    height: 12px;
+    margin: 0;
+}
+
+QScrollBar::handle:horizontal {
+    background: #5a544d;
+    border-radius: 5px;
+    min-width: 24px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: #ff8c1a;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+
+QTableWidget {
+    background-color: #262320;
+    alternate-background-color: #2a2724;
+    gridline-color: #3d3833;
+    border: 1px solid #3d3833;
+    border-radius: 4px;
+    selection-background-color: #ff8c1a;
+    selection-color: #1e1c1a;
+}
+
+QHeaderView::section {
+    background-color: #2f2b27;
+    color: #ff8c1a;
+    padding: 4px;
+    border: none;
+    border-bottom: 1px solid #3d3833;
+    font-weight: 600;
+}
+
+QTableWidget::item:selected {
+    background-color: #ff8c1a;
+    color: #1e1c1a;
+}
+
+QMessageBox, QFileDialog {
+    background-color: #1e1c1a;
+}
+
+QToolTip {
+    background-color: #2f2b27;
+    color: #f2ede8;
+    border: 1px solid #ff8c1a;
+    padding: 4px;
+}
+"""
 
 
 class EmittingStream(QObject):
@@ -495,7 +683,11 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    app.setStyleSheet(DARK_ORANGE_STYLESHEET)
+    icon = _load_app_icon()
+    app.setWindowIcon(icon)
     window = MainWindow()
+    window.setWindowIcon(icon)
     window.show()
     sys.exit(app.exec())
 

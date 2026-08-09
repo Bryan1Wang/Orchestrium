@@ -1,12 +1,17 @@
+import sys
 from pathlib import Path
 
 import mido
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from meta_track import crop_meta_track
 from track_crop import crop_note_track
 
+import app_paths
+
 
 def slice_master_score(voice_track_index=1, intro_bars=0, num_bars=10):
-    PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+    PROJECT_ROOT = app_paths.PROJECT_ROOT
     master_midi_path = PROJECT_ROOT / "data" / "raw" / "SCORE.mid"
     output_path = PROJECT_ROOT / "data" / "raw" / "SOLO.mid"
 
