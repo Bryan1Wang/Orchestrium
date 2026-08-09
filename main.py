@@ -73,8 +73,12 @@ def run_pipeline(
     skip_track=None,
     orchestra_gain_db=-4.0,
     solo_gain_db=3.0,
+    filter_ghost_pitches=True,
+    ghost_min_silence_seconds=1.0,
+    ghost_silence_thresh_offset_db=-20.0,
     min_score_rest_seconds=3.0,
     min_recording_pause_seconds=2.0,
+    onset_leeway_seconds=0.75,
     max_tempo_jump_pct=0.25,
     jump_floor_seconds=0.07,
     absolute_deviation_seconds=1.0,
@@ -123,7 +127,13 @@ def run_pipeline(
 
     # 2. Transcribe the raw audio performance using Basic Pitch
     print("Transcribing live performance audio...")
-    player_onset_sequence = transcribe.transcribe(rec_audio_path, output_dir=output_dir)
+    player_onset_sequence = transcribe.transcribe(
+        rec_audio_path,
+        output_dir=output_dir,
+        filter_ghost_pitches=filter_ghost_pitches,
+        ghost_min_silence_seconds=ghost_min_silence_seconds,
+        ghost_silence_thresh_offset_db=ghost_silence_thresh_offset_db,
+    )
     rec_midi_path = transcribe.generated_midi_path(rec_audio_path, output_dir=output_dir)
     print(f"Extracted {len(player_onset_sequence)} performance events from audio.\n")
 
@@ -192,6 +202,7 @@ def run_pipeline(
         warp_time=plain_warp,
         min_score_rest_seconds=min_score_rest_seconds,
         min_recording_pause_seconds=min_recording_pause_seconds,
+        onset_leeway_seconds=onset_leeway_seconds,
         solo_midi_path=solo_midi_path,
         rec_midi_path=rec_midi_path,
     )

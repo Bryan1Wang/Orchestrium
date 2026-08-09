@@ -114,6 +114,7 @@ def get_verified_tutti_rests(
     min_score_rest_seconds=3.0,
     min_recording_pause_seconds=2.0,
     search_margin_seconds=1.5,
+    onset_leeway_seconds=0.75,
     solo_midi_path=None,
     rec_midi_path=None,
 ):
@@ -128,6 +129,16 @@ def get_verified_tutti_rests(
     note in the recording, or the search window's edge) -- create_midi uses
     it as the splice point for extending the pause, instead of a warp-curve
     estimate that can land after that onset and clip into the note.
+
+    verified_gap_end has onset_leeway_seconds subtracted before it's
+    returned: Basic Pitch's reported onset for the next note can itself land
+    a little after the note's true acoustic attack, and audio_utils.
+    extend_rec_pauses splices in silence at exactly this boundary with no
+    margin of its own -- an uncorrected boundary can therefore cut into the
+    front of that note. The leeway is clamped so it never moves the boundary
+    earlier than gap_start (match[0], the point verify_recording_pause
+    already confirmed the *previous* sound ends), so it can never eat into
+    the previous note or exceed the real detected pause.
     """
     score_rests = find_score_rests(solo_midi_path, min_score_rest_seconds)
 
@@ -149,6 +160,8 @@ def get_verified_tutti_rests(
                 f"{warp_time(rest_end_score):.2f}s"
             )
             continue
-        verified.append((rest_start_score, rest_end_score, match[1]))
+        gap_start, gap_end = match
+        verified_gap_end = max(gap_start, gap_end - onset_leeway_seconds)
+        verified.append((rest_start_score, rest_end_score, verified_gap_end))
 
     return verified

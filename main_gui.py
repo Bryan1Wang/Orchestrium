@@ -62,15 +62,29 @@ PROJECT_ROOT = app_paths.PROJECT_ROOT
 
 # (param_name, label, kind, decimals, minimum, maximum, step)
 REST_DETECTION_SPECS = [
-    ("min_score_rest_seconds", "Min score rest length (s):", "float", 2, 0.0, 60.0, 0.1),
+    ("min_score_rest_seconds", "Min score rest length (s):", "float", 2, 1.5, 60.0, 0.1),
     (
         "min_recording_pause_seconds",
         "Min recording pause length (s):",
         "float",
         2,
-        0.0,
+        1.5,
         60.0,
         0.1,
+    ),
+    ("onset_leeway_seconds", "Note-onset leeway (s):", "float", 2, 0.0, 5.0, 0.05),
+]
+
+GHOST_FILTER_SPECS = [
+    ("ghost_min_silence_seconds", "Min silence length (s):", "float", 2, 0.1, 30.0, 0.1),
+    (
+        "ghost_silence_thresh_offset_db",
+        "Silence threshold offset (dB):",
+        "float",
+        1,
+        -80.0,
+        0.0,
+        1.0,
     ),
 ]
 
@@ -268,6 +282,10 @@ class MainWindow(QMainWindow):
         self.keep_temp_checkbox.setChecked(False)
         advanced_layout.addWidget(self.keep_temp_checkbox)
 
+        self.ghost_filter_checkbox = QCheckBox("Filter ghost pitches in quiet regions")
+        self.ghost_filter_checkbox.setChecked(True)
+        advanced_layout.addWidget(self.ghost_filter_checkbox)
+
         skip_track_row = QHBoxLayout()
         self.skip_track_spin = QSpinBox()
         self.skip_track_spin.setRange(-1, 999)
@@ -279,6 +297,9 @@ class MainWindow(QMainWindow):
         advanced_layout.addLayout(skip_track_row)
 
         self.advanced_spins = {}
+        advanced_layout.addWidget(
+            self._build_spec_group("Ghost Pitch Filtering", GHOST_FILTER_SPECS, defaults)
+        )
         advanced_layout.addWidget(
             self._build_spec_group("Rest Detection", REST_DETECTION_SPECS, defaults)
         )
@@ -436,6 +457,7 @@ class MainWindow(QMainWindow):
             "output_dir": output_dir_text or None,
             "output_filename": self.output_filename_edit.text().strip() or None,
             "keep_temp_files": self.keep_temp_checkbox.isChecked(),
+            "filter_ghost_pitches": self.ghost_filter_checkbox.isChecked(),
             "sfizz_exe_path": required["sfizz_render executable"],
             "vpo_dir": required["VPO Sample Library Folder"],
             "orchestra_gain_db": self.orchestra_gain_spin.value(),
