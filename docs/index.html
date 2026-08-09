@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orchestrium — Your Live Performance, Fully Orchestrated</title>
+<meta name="description" content="Orchestrium listens to your live performance and automatically builds a real orchestral accompaniment that follows your tempo — then mixes it into one finished track.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23161620'/%3E%3Cpath d='M12 8v11.5a3.5 3.5 0 1 1-2-3.163V10l10-2v9.5a3.5 3.5 0 1 1-2-3.163V6z' fill='%23f2a44a'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="bg-glow" aria-hidden="true"></div>
+
+<header class="navbar">
+  <div class="container">
+    <a class="brand" href="#top">
+      <svg class="mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#1c1c26"/>
+        <path d="M12 8v11.5a3.5 3.5 0 1 1-2-3.163V10l10-2v9.5a3.5 3.5 0 1 1-2-3.163V6z" fill="#f2a44a"/>
+      </svg>
+      Orchestrium
+    </a>
+    <nav class="nav-links" id="navLinks">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it Works</a>
+      <a href="#built-with">Built With</a>
+      <a class="btn btn-ghost btn-sm" href="https://github.com/Bryan1Wang/Orchestrium" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+    <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation" aria-expanded="false">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    </button>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <span class="eyebrow"><span class="dot" aria-hidden="true"></span> Solo performance in, full orchestra out</span>
+      <h1>Play alone.<br>Sound like a <span class="accent">full orchestra</span>.</h1>
+      <p class="hero-sub">
+        Orchestrium listens to how you actually played a piece — every rubato, pause, and
+        push — and builds a real orchestral accompaniment that follows you, then mixes it
+        into one finished recording.
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="https://github.com/Bryan1Wang/Orchestrium" target="_blank" rel="noopener">
+          View on GitHub
+        </a>
+        <a class="btn btn-ghost" href="#how-it-works">See How it Works</a>
+      </div>
+
+      <div class="wave-visual reveal" aria-hidden="true">
+        <div class="wave-row">
+          <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+          <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+          <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+          <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+          <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+          <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+          <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+          <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+          <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+          <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        </div>
+        <div class="wave-caption">
+          <span>your_recording.mp3</span>
+          <span>listening &amp; aligning…</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="section" id="features">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">Features</span>
+        <h2>Everything happens automatically</h2>
+        <p>No conducting, no manual syncing, no audio editing experience required.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="card reveal">
+          <div class="icon-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+          </div>
+          <h3>Follows your tempo</h3>
+          <p>Speeds up, slows down, and breathes with your playing instead of sticking to a rigid click track.</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="icon-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
+          </div>
+          <h3>Real orchestral sound</h3>
+          <p>The accompaniment is rendered with sampled orchestral instruments, not a flat synth playback.</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="icon-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="5"/></svg>
+          </div>
+          <h3>Handles pauses naturally</h3>
+          <p>Rests and held notes are detected and respected, so the orchestra never rushes ahead or cuts you off.</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="icon-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+          </div>
+          <h3>Simple, point-and-click</h3>
+          <p>Two easy desktop apps handle everything — no coding or audio engineering experience needed.</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="icon-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v-1a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v1"/><path d="M4 15h16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>
+          </div>
+          <h3>You stay in control</h3>
+          <p>Independent volume sliders balance your recording against the orchestra before the final mix.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="section alt" id="how-it-works">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">How it Works</span>
+        <h2>From a recording to a finished mix</h2>
+        <p>Four steps, all handled for you.</p>
+      </div>
+
+      <div class="steps">
+        <div class="step reveal">
+          <div class="step-num">1</div>
+          <h3>Prepare your files</h3>
+          <p>Point the app at your solo score, the full orchestra score, and a recording of yourself playing.</p>
+        </div>
+        <div class="step reveal">
+          <div class="step-num">2</div>
+          <h3>It listens &amp; aligns</h3>
+          <p>Orchestrium transcribes your recording and figures out exactly how your timing differs from the score.</p>
+        </div>
+        <div class="step reveal">
+          <div class="step-num">3</div>
+          <h3>The orchestra is warped</h3>
+          <p>The accompaniment is reshaped to follow your performance, then rendered with real sampled instruments.</p>
+        </div>
+        <div class="step reveal">
+          <div class="step-num">4</div>
+          <h3>Get your finished mix</h3>
+          <p>Your recording and the new orchestra are blended into a single, ready-to-share master track.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Built with -->
+  <section class="section" id="built-with">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">Under the Hood</span>
+        <h2>Built on great open tools</h2>
+        <p>Orchestrium stands on the shoulders of some excellent open-source and sample-library work.</p>
+      </div>
+      <div class="badges-row reveal">
+        <span class="tech-badge"><span class="dot"></span> Basic Pitch (Spotify)</span>
+        <span class="tech-badge"><span class="dot"></span> sfizz</span>
+        <span class="tech-badge"><span class="dot"></span> Versilian Studios sample libraries</span>
+        <span class="tech-badge"><span class="dot"></span> Python</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="section">
+    <div class="container">
+      <div class="cta-band reveal">
+        <h2>Ready to try it yourself?</h2>
+        <p>Grab the project from GitHub and run it locally in a couple of commands.</p>
+        <div class="code-snippet">
+          <div>env\Scripts\activate.bat</div>
+          <div>pip install -r requirements.txt</div>
+          <div>python src\main_gui.py</div>
+        </div>
+        <div class="hero-cta" style="margin-bottom:0;">
+          <a class="btn btn-primary" href="https://github.com/Bryan1Wang/Orchestrium" target="_blank" rel="noopener">View on GitHub</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="container">
+    <div class="foot-brand">
+      <svg class="mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#1c1c26"/>
+        <path d="M12 8v11.5a3.5 3.5 0 1 1-2-3.163V10l10-2v9.5a3.5 3.5 0 1 1-2-3.163V6z" fill="#f2a44a"/>
+      </svg>
+      Orchestrium
+    </div>
+    <p>&copy; <span id="year">2026</span> Orchestrium — released under the GNU GPLv3 license.</p>
+    <div class="foot-links">
+      <a href="https://github.com/Bryan1Wang/Orchestrium" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/Bryan1Wang/Orchestrium/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+    </div>
+  </div>
+</footer>
+
+<script src="js/main.js"></script>
+</body>
+</html>
