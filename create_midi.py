@@ -19,8 +19,7 @@ def _neighbor_interp_deviation(times, warped):
     """Absolute deviation of each interior anchor from where linearly
     interpolating its two immediate neighbors would put it.
 
-    Shared by _detect_tempo_jumps (as part of its combined relative+absolute
-    check) and _detect_absolute_position_jumps (as a standalone check).
+    Used by _detect_tempo_jumps and _detect_absolute_position_jumps.
     Returns an array aligned to `times`/`warped`, with the first/last entries
     undefined (callers only ever index into the interior [1:-1] range).
     """
@@ -203,7 +202,7 @@ def _dedup_anchors(anchors):
 
     n = len(score_times)
     if n == 0:
-        raise ValueError("make_midi requires at least one alignment anchor")
+        raise ValueError("at least one alignment anchor required")
 
     if n == 1:
         return score_times, player_times
@@ -701,8 +700,10 @@ def _build_split_warp(
             # preliminary cleaning pass (or was already missing from the
             # raw pool). Nothing to extrapolate from; treat the rest as
             # zero-width at whatever player-time is otherwise in scope.
-            fallback = prelim_warped[le] if 0 <= le < Np else (
-                prelim_warped[rs] if 0 <= rs < Np else raw_warped[0]
+            fallback = (
+                prelim_warped[le]
+                if 0 <= le < Np
+                else (prelim_warped[rs] if 0 <= rs < Np else raw_warped[0])
             )
             left_boundary.append(fallback)
             right_boundary.append(fallback)
@@ -975,78 +976,13 @@ def build_warp_curve(
     return (warp_time, diagnostics, intro_shift) if return_diagnostics else warp_time
 
 
-def make_midi(
-    midi_path,
-    anchors,
-    output_path,
-    max_tempo_jump_pct=0.25,
-    jump_floor_seconds=0.07,
-    absolute_deviation_seconds=1.0,
-    exclusion_radius_seconds=4.0,
-    side_search_radius_seconds=10.0,
-    side_min_points=6,
-    position_outlier_floor_seconds=0.8,
-    position_outlier_z=7.0,
-    contiguous_run_min_points=5,
-    max_gap_seconds=10.0,
-    chunk_seconds=1,
-    tutti_rests=None,
-    tempo_window_seconds=5.0,
-    tempo_window_min_points=4,
-    extend_intro=False,
-    score_start=0.0,
-    intro_lead_in_seconds=1.0,
-    start_speed_window_seconds=10.0,
-):
-    """Warp a MIDI file's timing to follow a performer.
-
-    Convenience wrapper: builds a score_time -> player_time warp curve from
-    `anchors` (see `build_warp_curve`; `tutti_rests`, if given, is forwarded
-    so its rest diagnostics (tutti_speed/shortfall/etc.) are computed, with
-    `tempo_window_seconds`/`tempo_window_min_points` controlling how far the
-    surrounding tempo estimate reaches on each side; `extend_intro`, if True,
-    is forwarded so the leading intro gets its full natural duration -- see
-    build_warp_curve's docstring), then hands it to `warp_midi_file`. If you
-    already have a warp curve built
-    (e.g. you needed it for diagnostics or rest verification first), call
-    `warp_midi_file` directly instead of this, to avoid rebuilding the same
-    curve again.
-    """
-    warp_time = build_warp_curve(
-        anchors,
-        max_tempo_jump_pct=max_tempo_jump_pct,
-        jump_floor_seconds=jump_floor_seconds,
-        absolute_deviation_seconds=absolute_deviation_seconds,
-        exclusion_radius_seconds=exclusion_radius_seconds,
-        side_search_radius_seconds=side_search_radius_seconds,
-        side_min_points=side_min_points,
-        position_outlier_floor_seconds=position_outlier_floor_seconds,
-        position_outlier_z=position_outlier_z,
-        contiguous_run_min_points=contiguous_run_min_points,
-        max_gap_seconds=max_gap_seconds,
-        chunk_seconds=chunk_seconds,
-        tutti_rests=tutti_rests,
-        tempo_window_seconds=tempo_window_seconds,
-        tempo_window_min_points=tempo_window_min_points,
-        extend_intro=extend_intro,
-        score_start=score_start,
-        intro_lead_in_seconds=intro_lead_in_seconds,
-        start_speed_window_seconds=start_speed_window_seconds,
-    )
-    warp_midi_file(midi_path, warp_time, output_path)
-
-
 def warp_midi_file(midi_path, warp_time, output_path):
     """Warp a MIDI file's timing according to an already-built warp curve.
 
     Walks every track of `midi_path`, converting each event's absolute tick
     to score-time seconds, applying `warp_time` (a plain score_time ->
     player_time callable, e.g. from `build_warp_curve`), and converting back
-    to ticks against a single fixed REFERENCE_TEMPO. Takes `warp_time`
-    directly rather than anchors so a caller that already built a curve
-    (e.g. to print diagnostics, or because it needed `tutti_rests`) can
-    reuse it here instead of triggering another `_clean_anchors` +
-    curve-fit pass through `make_midi`.
+    to ticks against a single fixed REFERENCE_TEMPO.
     """
     # Ticks are re-emitted against one fixed REFERENCE_TEMPO rather than the
     # source file's own tempo curve: pm.tick_to_time is only used to recover

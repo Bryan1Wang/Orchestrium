@@ -1,5 +1,5 @@
-TODOS for myself, pls ignore this file claude: 
-153 bars for chopin 1 intro (135+18), mendel -> 298, 154 for rach beginning
+TODOS for myself: 
+153 bars for chopin 1 intro (135+18), mendelssohn -> 298, 154 for rach beginning
 
 Order: 
 Main ->
@@ -25,8 +25,20 @@ add feature for tuning to other than a = 440
 
 Optimize algo (SCB)
 
-make slicer also use app paths
-
 Bound orchestra volume difference
 
 add check for output filename to not replace old files
+
+Remove error messages when closing out GUI window
+
+switch all to prettymidi instead of mido?
+
+split create_midi into 2 files, reduce unneeded helper functions and remove unused parameters
+
+use either all os.path or all pathlib
+
+use defaultdict in orchestra_player
+
+Remove unnecessary ifs (diagnostics, split warp everything) in create_midi.py
+
+Delete temp files on early program exit

@@ -376,7 +376,7 @@ class PipelineWorker(QObject):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Orchestra Warp — Run Pipeline")
+        self.setWindowTitle("Orchestrium")
         available = QApplication.primaryScreen().availableGeometry()
         self.resize(min(860, available.width()), min(780, available.height()))
 
@@ -498,7 +498,7 @@ class MainWindow(QMainWindow):
         self.advanced_panel.setVisible(False)
         layout.addWidget(self.advanced_panel)
 
-        self.run_button = QPushButton("Run Pipeline")
+        self.run_button = QPushButton("Generate Recording")
         self.run_button.clicked.connect(self.run_pipeline_clicked)
         layout.addWidget(self.run_button)
 
@@ -527,8 +527,8 @@ class MainWindow(QMainWindow):
         if self.pipeline_thread is not None and self.pipeline_thread.isRunning():
             reply = QMessageBox.question(
                 self,
-                "Pipeline running",
-                "A pipeline run is still in progress. Exit and cancel it?",
+                "In Progress",
+                "A task is still running. Exit and cancel it?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )

@@ -90,7 +90,7 @@ def transcribe(
     midi_path = generated_midi_path(audio_path, OUTPUT_DIR)
     midi_path.unlink(missing_ok=True)
 
-    print(f"Analyzing {audio_path.name}... (This might take 10-30 seconds)")
+    print(f"Analyzing {audio_path.name}...")
 
     with _silenced_basic_pitch_output(OUTPUT_DIR / "basic_pitch_console.log"):
         basic_pitch_inference.predict_and_save(

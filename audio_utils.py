@@ -1,52 +1,8 @@
 from pydub import AudioSegment
 
 import app_paths
-import create_midi
-import score_reader
-import tempo_sync
-import transcribe
 
 PROJECT_ROOT = app_paths.PROJECT_ROOT
-
-
-def find_intro_crop_point(buffer_seconds=1.0):
-    """Estimate where REC.mp3's lead-in should be cropped.
-
-    The soloist's first score note often has no direct DTW anchor (the
-    lead-in before their entrance can't be matched), so the corresponding
-    player_time is extrapolated from create_midi's warp curve instead of
-    read off an anchor directly.
-    """
-    sheet_music_sequence = score_reader.extract_notes()
-    player_onset_sequence = transcribe.transcribe()
-    alignment_results = tempo_sync.align(player_onset_sequence, sheet_music_sequence)
-
-    warp_time = create_midi.build_warp_curve(alignment_results)
-
-    first_score_time = sheet_music_sequence[0][0]
-    extrapolated_player_time = warp_time(first_score_time)
-    crop_time = max(0.0, extrapolated_player_time - buffer_seconds)
-
-    print(f"First score note at score time {first_score_time:.3f}s")
-    print(f"Extrapolated player time: {extrapolated_player_time:.3f}s")
-    print(f"Crop point (with {buffer_seconds}s buffer): {crop_time:.3f}s")
-
-    return crop_time
-
-
-def trim_rec_intro(output_path=None, buffer_seconds=1.0):
-    rec_path = PROJECT_ROOT / "data" / "raw" / "REC.mp3"
-    if output_path is None:
-        output_path = app_paths.DEFAULT_OUTPUT_DIR / "REC_trimmed.mp3"
-
-    crop_time = find_intro_crop_point(buffer_seconds=buffer_seconds)
-
-    audio = AudioSegment.from_mp3(rec_path)
-    trimmed = audio[crop_time * 1000 :]
-    trimmed.export(output_path, format="mp3")
-
-    print(f"Wrote trimmed audio ({trimmed.duration_seconds:.2f}s) to {output_path}")
-    return output_path
 
 
 def extend_rec_pauses(
@@ -132,9 +88,3 @@ def overlay_with_gain(
     mix = mix.overlay(orchestra_audio)
     mix = mix.overlay(solo_audio)
     return mix
-
-
-if __name__ == "__main__":
-    # Temporary: for testing this one feature in isolation. Remove once
-    # trimming is wired into the real pipeline.
-    trim_rec_intro()

@@ -379,7 +379,6 @@ def render_precise_gm_orchestra(
 
                 if process.returncode != 0:
                     print(stderr)
-
                 else:
                     time.sleep(0.2)
 
@@ -421,6 +420,6 @@ def render_precise_gm_orchestra(
 
     mix.export(final_master, format="mp3", bitrate="192k")
 
-    #print("\nDONE:", final_master)
+    # print("\nDONE:", final_master)
 
     return mix

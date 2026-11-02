@@ -137,7 +137,7 @@ def run_pipeline(
     rec_midi_path = transcribe.generated_midi_path(rec_audio_path, output_dir=output_dir)
     print(f"Extracted {len(player_onset_sequence)} performance events from audio.\n")
 
-    # 3. Align the performance to the score using your DTW algorithm
+    # 3. Align the performance to the score using the DTW algorithm
     print("Aligning performance to sheet music...")
     alignment_results = tempo_sync.align(
         player_onset_sequence, sheet_music_sequence, polyphony_detection=polyphony_detection
@@ -145,8 +145,8 @@ def run_pipeline(
 
     print("\nAlignment Complete!")
 
-    # Track counts for your summary
     """
+    # Track counts for the summary
     matches_count = 0
     for match_idx, (orch_time, player_time) in enumerate(alignment_results):
         # 1. Find the matching chord in the sheet music by matching the timestamp
@@ -175,25 +175,7 @@ def run_pipeline(
         )
     """
     print(f"\nTotal Successful Matches Synced: {len(alignment_results)}")
-    """
-    # 4. Generate the tempo map
-    print("\nGenerating Tempo Map...")
-    tempo_map = find_tempo.map_tempo(alignment_results)
-    print(f"\nGenerated {len(tempo_map)} tempo mapping windows.")
-    counter = 0
-    prev = 0
-    prev_speed = 1
-    for idx, (window_time, speed) in enumerate(tempo_map):
-        counter += (window_time - prev) / prev_speed
-        prev = window_time
-        prev_speed = speed
-        print(
-            f"Tempo Marker #{idx:03d} at {window_time:6.2f}s (Score Time) -> Speed Multiplier: {speed:.2f}x"
-        )
 
-    print("=" * 40 + "\n")
-    print(counter)
-    """
     # Verified tutti rests need a warp curve to check expected player-time
     # windows against -- build the plain (unshifted, unsplit) curve just for
     # that lookup, per rest_utils.get_verified_tutti_rests's docstring.
