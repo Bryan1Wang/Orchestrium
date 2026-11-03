@@ -42,3 +42,5 @@ use defaultdict in orchestra_player
 Remove unnecessary ifs (diagnostics, split warp everything) in create_midi.py
 
 Delete temp files on early program exit
+
+Give more weight too score tempo in the intro
