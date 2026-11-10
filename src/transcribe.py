@@ -9,6 +9,8 @@ from pydub.silence import detect_silence
 
 import app_paths
 
+GHOST_REGION_END_MARGIN_SECONDS = 0.3
+
 
 @contextlib.contextmanager
 def _silenced_basic_pitch_output(log_path: Path):
@@ -116,7 +118,14 @@ def transcribe(
             for instrument in midi_data.instruments:
                 kept_notes = []
                 for note in instrument.notes:
-                    if any(start <= note.start <= end for start, end in low_energy_regions):
+                    # A real note's attack is what ends a quiet region, and
+                    # the region's end is only accurate to ~0.15s (it comes
+                    # from a coarse, 1s-wide sliding window), so a note at the
+                    # very end of one is almost certainly real, not a ghost.
+                    if any(
+                        start <= note.start < end - GHOST_REGION_END_MARGIN_SECONDS
+                        for start, end in low_energy_regions
+                    ):
                         dropped += 1
                     else:
                         kept_notes.append(note)

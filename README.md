@@ -20,16 +20,24 @@ No conductor, no backing band, no manual editing required — just record yourse
 
 ## 🚀 Getting Started
 
-1. Set up the environment (one-time):
+1. Install [Python 3.11](https://www.python.org/downloads/) (the version Orchestrium is developed on) and [ffmpeg](https://ffmpeg.org/download.html) (needed to read and write MP3s). Make sure both are on your PATH.
+2. Clone the project:
    ```
+   git clone https://github.com/Bryan1Wang/Orchestrium.git
+   cd Orchestrium
+   ```
+3. Download the [Virtual Playing Orchestra](https://virtualplaying.com/virtual-playing-orchestra/) from its website. You need two zips: the **Wave Files** and the **Standard Orchestra** sfz scripts (not the Performance Orchestra). Extract both into the project's `VPO` folder, so folders like `Strings` and `Woodwinds` sit directly inside it.
+4. Set up the environment (one-time):
+   ```
+   python -m venv env
    env\Scripts\activate.bat
    pip install -r requirements.txt
    ```
-2. Launch the app:
+5. Launch the app:
    ```
    python src\main_gui.py
    ```
-3. Pick your solo instrument's score (MIDI), the full orchestra score (MIDI), and your recording of yourself playing, then hit **Run Pipeline**.
+6. Pick your solo instrument's score (MIDI), the full orchestra score (MIDI), and your recording of yourself playing, then hit **Run Pipeline**.
 
 Don't have a separate solo/orchestra score yet? Use the companion **Score Slicer** tool (`python src\utils\slicer_gui.py`) to split one combined score into a solo part and an orchestra part first.
 

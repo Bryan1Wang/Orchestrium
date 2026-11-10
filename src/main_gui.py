@@ -333,6 +333,20 @@ class EmittingStream(QObject):
             self._buffer = ""
 
 
+class NoScrollSpinBox(QSpinBox):
+    """A QSpinBox that ignores the mouse wheel so scrolling the page doesn't change it."""
+
+    def wheelEvent(self, event):
+        event.ignore()
+
+
+class NoScrollDoubleSpinBox(QDoubleSpinBox):
+    """A QDoubleSpinBox that ignores the mouse wheel so scrolling the page doesn't change it."""
+
+    def wheelEvent(self, event):
+        event.ignore()
+
+
 class ClampedZoomTextEdit(QTextEdit):
     """A QTextEdit whose built-in Ctrl+Wheel zoom is clamped to a sane range."""
 
@@ -475,7 +489,7 @@ class MainWindow(QMainWindow):
         advanced_layout.addWidget(self.ghost_filter_checkbox)
 
         skip_track_row = QHBoxLayout()
-        self.skip_track_spin = QSpinBox()
+        self.skip_track_spin = NoScrollSpinBox()
         self.skip_track_spin.setRange(-1, 999)
         self.skip_track_spin.setValue(-1)
         self.skip_track_spin.setMinimumWidth(90)
@@ -551,7 +565,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _make_double_spin(value, minimum, maximum, decimals, step):
-        spin = QDoubleSpinBox()
+        spin = NoScrollDoubleSpinBox()
         spin.setDecimals(decimals)
         spin.setRange(minimum, maximum)
         spin.setSingleStep(step)
@@ -600,7 +614,7 @@ class MainWindow(QMainWindow):
         for name, label, kind, decimals, minimum, maximum, step in specs:
             default_value = defaults[name].default
             if kind == "int":
-                spin = QSpinBox()
+                spin = NoScrollSpinBox()
                 spin.setRange(int(minimum), int(maximum))
                 spin.setSingleStep(int(step))
                 spin.setValue(int(default_value))

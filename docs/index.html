@@ -10,6 +10,7 @@
   <link rel="icon"
     href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231c1c26'/%3E%3Cg stroke='%23f2a44a' stroke-linecap='round'%3E%3Cpath d='M12.49 6.96v6.84q0 8.37-3.06 8.37' stroke-width='1.593' stroke-linejoin='round'/%3E%3Cg transform='matrix(.9 0 0 .9 1.6 1.2)'%3E%3Ccircle cx='8.5' cy='23.3' r='2.2' fill='%23f2a44a' stroke='none'/%3E%3Ccircle cx='8.5' cy='23.3' r='3.4' stroke-width='.77' stroke-dasharray='1.2 1.0'/%3E%3Ccircle cx='8.5' cy='23.3' r='4.6' stroke-width='.55' stroke-dasharray='0.6 1.2'/%3E%3C/g%3E%3Cpath d='M24.19 6.96v6.84q0 8.37-3.06 8.37' stroke-width='1.593' stroke-linejoin='round'/%3E%3Cg transform='matrix(.9 0 0 .9 1.6 1.2)'%3E%3Ccircle cx='21.5' cy='23.3' r='2.2' fill='%23f2a44a' stroke='none'/%3E%3Ccircle cx='21.5' cy='23.3' r='3.4' stroke-width='.77' stroke-dasharray='1.2 1.0'/%3E%3Ccircle cx='21.5' cy='23.3' r='4.6' stroke-width='.55' stroke-dasharray='0.6 1.2'/%3E%3C/g%3E%3Cpath d='M12.49 7.05c2.61-2.7 3.96 3.6 6.66 0 2.25-2.7 3.15 1.8 5.04 0m-11.7 4.05c2.61-2.7 3.96 3.6 6.66 0 2.25-2.7 3.15 1.8 5.04 0' stroke-width='1.62' stroke-linejoin='round'/%3E%3C/g%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/demo.css">
 </head>
 
 <body>
@@ -48,6 +49,7 @@
         Orchestrium
       </a>
       <nav class="nav-links" id="navLinks">
+        <a href="#demo">Demo</a>
         <a href="#features">Features</a>
         <a href="#how-it-works">How it Works</a>
         <a href="#built-with">Built With</a>
@@ -130,6 +132,48 @@
             <span>your_recording.mp3</span>
             <span>listening &amp; aligning…</span>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Demo -->
+    <section class="section demo" id="demo">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow">Hear it in action</span>
+          <h2>Mendelssohn, before &amp; after</h2>
+          <p>A solo recording made at home, then the same take run through Orchestrium. Listen to the solo
+            recording first, then switch to hear the same performance with the orchestra following along.</p>
+        </div>
+
+        <div class="player reveal" id="abPlayer" data-state="before">
+          <div class="player-tabs" role="tablist" aria-label="Choose version">
+            <button class="player-tab is-active" role="tab" aria-selected="true" data-track="before">
+              <span class="tab-label">Before</span>
+              <span class="tab-sub">Solo recording</span>
+            </button>
+            <button class="player-tab" role="tab" aria-selected="false" data-track="after">
+              <span class="tab-label">After</span>
+              <span class="tab-sub">With Orchestrium orchestra</span>
+            </button>
+            <span class="tab-glider" aria-hidden="true"></span>
+          </div>
+
+          <div class="player-wave" id="playerWave">
+            <canvas id="waveCanvas" aria-label="Waveform. Click to seek."></canvas>
+            <div class="wave-playhead" id="wavePlayhead"></div>
+          </div>
+
+          <div class="player-controls">
+            <button class="play-btn" id="playBtn" aria-label="Play">
+              <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+              <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>
+            </button>
+            <div class="player-time"><span id="timeCur">0:00</span> <span class="sep">/</span> <span id="timeTot">0:00</span></div>
+          </div>
+
+          <audio id="audioBefore" src="assets/audio/MendyRec.mp3" preload="auto"></audio>
+          <audio id="audioAfter" src="assets/audio/MendyDemo.mp3" preload="auto"></audio>
         </div>
       </div>
     </section>
@@ -260,12 +304,30 @@
       <div class="container">
         <div class="cta-band reveal">
           <h2>Ready to try it yourself?</h2>
-          <p>Grab the project from GitHub and run it locally in a couple of commands.</p>
+          <p>Grab the project from GitHub and run it locally (Windows).</p>
+          <ol class="cta-steps">
+            <li><strong>Install <a href="https://www.python.org/downloads/" target="_blank" rel="noopener">Python
+                  3.11</a></strong> (the version Orchestrium is developed on) and
+              <strong><a href="https://ffmpeg.org/download.html" target="_blank" rel="noopener">ffmpeg</a></strong>,
+              which is needed to read and write MP3s. Make sure both are on your PATH.</li>
+            <li><strong>Download the <a href="https://virtualplaying.com/virtual-playing-orchestra/" target="_blank"
+                  rel="noopener">Virtual Playing Orchestra</a></strong> from its website. You need two zips: the
+              <strong>Wave Files</strong> and the <strong>Standard Orchestra</strong> sfz scripts (not the Performance
+              Orchestra). Extract both into the project's <code>VPO</code> folder, so folders like
+              <code>Strings</code> and <code>Woodwinds</code> sit directly inside it.</li>
+            <li><strong>Clone the project and launch the app:</strong></li>
+          </ol>
           <div class="code-snippet">
+            <div>git clone https://github.com/Bryan1Wang/Orchestrium.git</div>
+            <div>cd Orchestrium</div>
+            <div>python -m venv env</div>
             <div>env\Scripts\activate.bat</div>
             <div>pip install -r requirements.txt</div>
             <div>python src\main_gui.py</div>
           </div>
+          <p class="cta-note">The <code>VPO</code> folder is created when you clone, so extract the samples into it
+            after the <code>git clone</code> step. You'll also need a solo MIDI, an orchestra MIDI and a recording of
+            your playing.</p>
           <div class="hero-cta" style="margin-bottom:0;">
             <a class="btn btn-primary" href="https://github.com/Bryan1Wang/Orchestrium" target="_blank"
               rel="noopener">View on GitHub</a>
@@ -301,6 +363,7 @@
   </footer>
 
   <script src="js/main.js"></script>
+  <script src="js/demo.js"></script>
 </body>
 
 </html>
