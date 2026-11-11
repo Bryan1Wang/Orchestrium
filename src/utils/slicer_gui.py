@@ -4,217 +4,35 @@ from pathlib import Path
 
 import mido
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Run standalone, only utils/ is on sys.path; hosted by orchestrium, only src/ is.
+# Cover both so `meta_track`/`track_crop`/`app_paths` always resolve.
+_UTILS_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(_UTILS_DIR))
+sys.path.insert(0, str(_UTILS_DIR.parent))
+
 from meta_track import crop_meta_track
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
-    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 from track_crop import crop_note_track
 
 import app_paths
+import app_style
 
 PROJECT_ROOT = app_paths.PROJECT_ROOT
-
-
-def _load_app_icon() -> QIcon:
-    """The user drops their own icon.ico/png in assets/ -- until then, no-op."""
-    for name in ("icon.ico", "icon.png"):
-        icon_path = PROJECT_ROOT / "assets" / name
-        if icon_path.exists():
-            return QIcon(str(icon_path))
-    return QIcon()
-
-
-DARK_ORANGE_STYLESHEET = """
-QWidget {
-    background-color: #1e1c1a;
-    color: #f2ede8;
-    font-size: 10pt;
-}
-
-QMainWindow, QScrollArea, QAbstractScrollArea {
-    background-color: #1e1c1a;
-    border: none;
-}
-
-QLabel {
-    background: transparent;
-    color: #f2ede8;
-}
-
-QGroupBox {
-    background-color: #262320;
-    border: 1px solid #3d3833;
-    border-radius: 6px;
-    margin-top: 14px;
-    padding: 10px 8px 8px 8px;
-    font-weight: 600;
-}
-
-QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    left: 10px;
-    padding: 0 4px;
-    color: #ff8c1a;
-}
-
-QPushButton {
-    background-color: #ff8c1a;
-    color: #1e1c1a;
-    border: none;
-    border-radius: 5px;
-    padding: 6px 14px;
-    font-weight: 600;
-}
-
-QPushButton:hover {
-    background-color: #ff9f40;
-}
-
-QPushButton:pressed {
-    background-color: #e67512;
-}
-
-QPushButton:disabled {
-    background-color: #5a544d;
-    color: #b8b0a8;
-}
-
-QPushButton:checkable:checked {
-    background-color: #e67512;
-}
-
-QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox {
-    background-color: #2f2b27;
-    color: #f2ede8;
-    border: 1px solid #3d3833;
-    border-radius: 4px;
-    padding: 3px 6px;
-    selection-background-color: #ff8c1a;
-    selection-color: #1e1c1a;
-}
-
-QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
-    border: 1px solid #ff8c1a;
-}
-
-QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {
-    color: #b8b0a8;
-    background-color: #262320;
-}
-
-QCheckBox {
-    spacing: 8px;
-}
-
-QCheckBox::indicator {
-    width: 15px;
-    height: 15px;
-    border: 1px solid #3d3833;
-    border-radius: 3px;
-    background-color: #2f2b27;
-}
-
-QCheckBox::indicator:checked {
-    background-color: #ff8c1a;
-    border: 1px solid #ff8c1a;
-}
-
-QCheckBox::indicator:hover {
-    border: 1px solid #ff8c1a;
-}
-
-QScrollBar:vertical {
-    background: #1e1c1a;
-    width: 12px;
-    margin: 0;
-}
-
-QScrollBar::handle:vertical {
-    background: #5a544d;
-    border-radius: 5px;
-    min-height: 24px;
-}
-
-QScrollBar::handle:vertical:hover {
-    background: #ff8c1a;
-}
-
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    height: 0;
-}
-
-QScrollBar:horizontal {
-    background: #1e1c1a;
-    height: 12px;
-    margin: 0;
-}
-
-QScrollBar::handle:horizontal {
-    background: #5a544d;
-    border-radius: 5px;
-    min-width: 24px;
-}
-
-QScrollBar::handle:horizontal:hover {
-    background: #ff8c1a;
-}
-
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-    width: 0;
-}
-
-QTableWidget {
-    background-color: #262320;
-    alternate-background-color: #2a2724;
-    gridline-color: #3d3833;
-    border: 1px solid #3d3833;
-    border-radius: 4px;
-    selection-background-color: #ff8c1a;
-    selection-color: #1e1c1a;
-}
-
-QHeaderView::section {
-    background-color: #2f2b27;
-    color: #ff8c1a;
-    padding: 4px;
-    border: none;
-    border-bottom: 1px solid #3d3833;
-    font-weight: 600;
-}
-
-QTableWidget::item:selected {
-    background-color: #ff8c1a;
-    color: #1e1c1a;
-}
-
-QMessageBox, QFileDialog {
-    background-color: #1e1c1a;
-}
-
-QToolTip {
-    background-color: #2f2b27;
-    color: #f2ede8;
-    border: 1px solid #ff8c1a;
-    padding: 4px;
-}
-"""
 
 GM_INSTRUMENTS = [
     "Acoustic Grand Piano",
@@ -359,78 +177,92 @@ def instrument_label(program, channel):
         return GM_INSTRUMENTS[program]
     return f"Program {program}"
 
+class SlicerPage(QWidget):
+    """The score slicer as an embeddable page (used by orchestrium and SlicerWindow)."""
 
-class ClampedZoomTextEdit(QTextEdit):
-    """A QTextEdit whose built-in Ctrl+Wheel zoom is clamped to a sane range."""
+    # Emitted with (solo_path, orchestra_path) after a successful slice.
+    sliced = Signal(str, str)
 
-    MIN_POINT_SIZE = 6.0
-    MAX_POINT_SIZE = 28.0
-
-    def wheelEvent(self, event):
-        super().wheelEvent(event)
-        doc = self.document()
-        font = doc.defaultFont()
-        size = font.pointSizeF()
-        if size <= 0:
-            return
-        clamped = max(self.MIN_POINT_SIZE, min(self.MAX_POINT_SIZE, size))
-        if clamped != size:
-            font.setPointSizeF(clamped)
-            doc.setDefaultFont(font)
-
-
-class SlicerWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Score Slicer")
-        self.resize(900, 700)
+        self.setObjectName("pageRoot")
 
         self.mid = None
         self.ticks_per_bar = None
         self.solo_track_index = None
 
-        central = QWidget()
-        self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
-
-        input_row = QHBoxLayout()
-        default_score = PROJECT_ROOT / "data" / "raw" / "SCORE.mid"
-        self.input_path_edit = QLineEdit(
-            str(default_score) if default_score.exists() else ""
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(24, 20, 24, 20)
+        outer.setSpacing(14)
+        outer.addWidget(
+            app_style.make_page_header(
+                "Score Slicer", "Split a master score into a solo part and an orchestra part."
+            )
         )
-        browse_input_btn = QPushButton("Browse…")
-        browse_input_btn.clicked.connect(self.browse_input)
+
+        # Everything below the header scrolls, so short windows don't squash the table.
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 8, 0)
+        layout.setSpacing(14)
+        scroll_area.setWidget(content)
+        outer.addWidget(scroll_area, 1)
+
+        # -- 1. source ---------------------------------------------------------
+        source_card, source_layout = app_style.make_card("1 · Master score")
+        grid = app_style.make_grid()
+        default_score = PROJECT_ROOT / "data" / "raw" / "SCORE.mid"
+        self.input_path_edit = app_style.add_path_row(
+            grid,
+            0,
+            "Score MIDI",
+            str(default_score) if default_score.exists() else "",
+            file_filter="MIDI files (*.mid *.midi)",
+            fallback_dir=PROJECT_ROOT / "data" / "raw",
+        )
         scan_btn = QPushButton("Scan Tracks")
         scan_btn.clicked.connect(self.scan_tracks)
-        input_row.addWidget(QLabel("Master score MIDI:"))
-        input_row.addWidget(self.input_path_edit)
-        input_row.addWidget(browse_input_btn)
-        input_row.addWidget(scan_btn)
-        layout.addLayout(input_row)
+        grid.addWidget(scan_btn, 0, 3)
+        source_layout.addLayout(grid)
 
-        self.file_info_label = QLabel(
-            'Load a file and click "Scan Tracks" to see its tracks.'
-        )
-        layout.addWidget(self.file_info_label)
+        self.file_info_label = QLabel('Load a file and click "Scan Tracks" to see its tracks.')
+        self.file_info_label.setObjectName("muted")
+        self.file_info_label.setWordWrap(True)
+        source_layout.addWidget(self.file_info_label)
+        layout.addWidget(source_card)
 
+        # -- 2. track table ---------------------------------------------------
+        tracks_card, tracks_layout = app_style.make_card("2 · Pick the solo track")
         self.track_table = QTableWidget(0, 4)
-        self.track_table.setHorizontalHeaderLabels(
-            ["Index", "Name", "Instrument", "Notes"]
-        )
+        self.track_table.setHorizontalHeaderLabels(["Index", "Name", "Instrument", "Notes"])
         self.track_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.track_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.track_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.track_table.setAlternatingRowColors(True)
+        self.track_table.verticalHeader().setVisible(False)
+        self.track_table.horizontalHeader().setStretchLastSection(True)
+        self.track_table.setMinimumHeight(260)
         self.track_table.itemSelectionChanged.connect(self.on_track_selected)
-        layout.addWidget(self.track_table)
+        tracks_layout.addWidget(self.track_table, 1)
 
         self.solo_label = QLabel("Solo track: (none selected)")
-        layout.addWidget(self.solo_label)
+        self.solo_label.setObjectName("stageLabel")
+        tracks_layout.addWidget(self.solo_label)
+        layout.addWidget(tracks_card, 1)
 
-        self.advanced_toggle = QPushButton("▸ Advanced")
+        # -- 3. range + output ------------------------------------------------------
+        output_card, output_layout = app_style.make_card("3 · Range & output")
+
+        self.advanced_toggle = QPushButton("▸  Measure range (optional)")
+        self.advanced_toggle.setObjectName("ghostButton")
         self.advanced_toggle.setCheckable(True)
         self.advanced_toggle.toggled.connect(self.toggle_advanced_panel)
-        layout.addWidget(self.advanced_toggle)
+        output_layout.addWidget(self.advanced_toggle)
 
         self.advanced_panel = QWidget()
         range_row = QHBoxLayout(self.advanced_panel)
@@ -440,66 +272,50 @@ class SlicerWindow(QMainWindow):
         self.end_measure_edit = QLineEdit()
         self.end_measure_edit.setPlaceholderText("to end of file")
         full_file_btn = QPushButton("Use Full File")
+        full_file_btn.setObjectName("ghostButton")
         full_file_btn.clicked.connect(self.use_full_file)
-        range_row.addWidget(QLabel("Start measure:"))
+        range_row.addWidget(QLabel("Start measure"))
         range_row.addWidget(self.start_measure_edit)
-        range_row.addWidget(QLabel("End measure:"))
+        range_row.addWidget(QLabel("End measure"))
         range_row.addWidget(self.end_measure_edit)
         range_row.addWidget(full_file_btn)
         self.advanced_panel.setVisible(False)
-        layout.addWidget(self.advanced_panel)
+        output_layout.addWidget(self.advanced_panel)
 
-        solo_row = QHBoxLayout()
-        default_solo = PROJECT_ROOT / "data" / "raw" / "SOLO.mid"
-        self.solo_output_edit = QLineEdit(str(default_solo))
-        solo_browse_btn = QPushButton("Browse…")
-        solo_browse_btn.clicked.connect(
-            lambda: self.browse_output(self.solo_output_edit)
+        grid = app_style.make_grid()
+        self.solo_output_edit = app_style.add_path_row(
+            grid,
+            0,
+            "Solo output",
+            str(PROJECT_ROOT / "data" / "raw" / "SOLO.mid"),
+            file_filter="MIDI files (*.mid *.midi)",
+            save=True,
         )
-        solo_row.addWidget(QLabel("Solo output:"))
-        solo_row.addWidget(self.solo_output_edit)
-        solo_row.addWidget(solo_browse_btn)
-        layout.addLayout(solo_row)
-
-        orch_row = QHBoxLayout()
-        default_orch = PROJECT_ROOT / "data" / "raw" / "ORCHESTRA.mid"
-        self.orchestra_output_edit = QLineEdit(str(default_orch))
-        orch_browse_btn = QPushButton("Browse…")
-        orch_browse_btn.clicked.connect(
-            lambda: self.browse_output(self.orchestra_output_edit)
+        self.orchestra_output_edit = app_style.add_path_row(
+            grid,
+            1,
+            "Orchestra output",
+            str(PROJECT_ROOT / "data" / "raw" / "ORCHESTRA.mid"),
+            file_filter="MIDI files (*.mid *.midi)",
+            save=True,
         )
-        orch_row.addWidget(QLabel("Orchestra output:"))
-        orch_row.addWidget(self.orchestra_output_edit)
-        orch_row.addWidget(orch_browse_btn)
-        layout.addLayout(orch_row)
+        output_layout.addLayout(grid)
 
+        slice_row = QHBoxLayout()
         slice_btn = QPushButton("Slice")
+        slice_btn.setObjectName("primaryButton")
         slice_btn.clicked.connect(self.slice_score)
-        layout.addWidget(slice_btn)
+        slice_row.addWidget(slice_btn)
+        slice_row.addStretch()
+        output_layout.addLayout(slice_row)
+        layout.addWidget(output_card)
 
-        self.log = ClampedZoomTextEdit()
-        self.log.setReadOnly(True)
+        self.log = app_style.make_log_edit()
+        self.log.setFixedHeight(110)
         layout.addWidget(self.log)
 
     def log_line(self, text):
         self.log.append(text)
-
-    def browse_input(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select master score MIDI",
-            str(PROJECT_ROOT / "data" / "raw"),
-            "MIDI files (*.mid *.midi)",
-        )
-        if path:
-            self.input_path_edit.setText(str(Path(path)))
-
-    def browse_output(self, line_edit):
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Select output file", line_edit.text(), "MIDI files (*.mid *.midi)"
-        )
-        if path:
-            line_edit.setText(str(Path(path)))
 
     def use_full_file(self):
         self.start_measure_edit.clear()
@@ -508,7 +324,7 @@ class SlicerWindow(QMainWindow):
     def toggle_advanced_panel(self, checked):
         self.advanced_panel.setVisible(checked)
         self.advanced_toggle.setText(
-            "▾ Advanced (measure range)" if checked else "▸ Advanced (measure range)"
+            "▾  Measure range (optional)" if checked else "▸  Measure range (optional)"
         )
 
     @staticmethod
@@ -670,15 +486,26 @@ class SlicerWindow(QMainWindow):
         orchestra_mid.save(orchestra_output)
         self.log_line(f"Wrote orchestra file ({included} tracks) to {orchestra_output}")
 
+        self.sliced.emit(solo_output, orchestra_output)
         QMessageBox.information(
             self, "Done", "Slicing complete — see the log for details."
         )
 
 
+class SlicerWindow(QMainWindow):
+    """Standalone host for the slicer page (run utils/slicer_gui.py directly)."""
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Score Slicer")
+        self.resize(900, 760)
+        self.setCentralWidget(SlicerPage())
+
+
 def main():
     app = QApplication(sys.argv)
-    app.setStyleSheet(DARK_ORANGE_STYLESHEET)
-    icon = _load_app_icon()
+    app.setStyleSheet(app_style.STYLESHEET)
+    icon = app_style.load_app_icon()
     app.setWindowIcon(icon)
     window = SlicerWindow()
     window.setWindowIcon(icon)

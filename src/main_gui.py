@@ -1,74 +1,60 @@
 import contextlib
 import inspect
 import sys
+import threading
 import traceback
 from pathlib import Path
 
 
-def _show_loading_splash():
-    """A tiny tkinter box shown while `main` (and onnxruntime) import.
+import splash
 
-    Uses tkinter rather than Qt because Qt must not be imported before
-    `main` (see note below) -- tkinter doesn't touch Qt's DLL search path,
-    so it can safely appear first and be torn down before PySide6 loads.
-    """
-    import tkinter as tk
-
-    splash = tk.Tk()
-    splash.overrideredirect(True)
-    width, height = 220, 70
-    screen_w = splash.winfo_screenwidth()
-    screen_h = splash.winfo_screenheight()
-    x, y = (screen_w - width) // 2, (screen_h - height) // 2
-    splash.geometry(f"{width}x{height}+{x}+{y}")
-    tk.Label(splash, text="Loading…", font=("Segoe UI", 12)).pack(expand=True, fill="both")
-    splash.update()
-    return splash
-
-
-_splash = _show_loading_splash()
+# Only when run directly; orchestrium shows its own splash when it imports this.
+_splash = splash.show() if __name__ == "__main__" else None
 
 # Must be imported before PySide6/Qt: importing Qt first changes the Windows
 # DLL search path in a way that breaks onnxruntime's native module load
 # (basic_pitch -> onnxruntime, pulled in transitively via main -> transcribe).
+# isort: off
 import app_paths
 import main as pipeline
 import orchestra_player
 
-_splash.destroy()
+# isort: on
 
-from PySide6.QtCore import QObject, QThread, Signal
-from PySide6.QtGui import QIcon
+if _splash is not None:
+    _splash.destroy()
+
+from PySide6.QtCore import (
+    QEasingCurve,
+    QObject,
+    QPropertyAnimation,
+    Qt,
+    QThread,
+    QTimer,
+    Signal,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
-    QDoubleSpinBox,
-    QFileDialog,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QScrollArea,
-    QSpinBox,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
+import app_style
+from app_style import NoScrollDoubleSpinBox, NoScrollSpinBox
+
 PROJECT_ROOT = app_paths.PROJECT_ROOT
-
-
-def _load_app_icon() -> QIcon:
-    """The user drops their own icon.ico/png in assets/ -- until then, no-op."""
-    for name in ("icon.ico", "icon.png"):
-        icon_path = PROJECT_ROOT / "assets" / name
-        if icon_path.exists():
-            return QIcon(str(icon_path))
-    return QIcon()
 
 
 # (param_name, label, kind, decimals, minimum, maximum, step)
@@ -125,183 +111,6 @@ WARP_CURVE_SPECS = [
 ]
 
 
-DARK_ORANGE_STYLESHEET = """
-QWidget {
-    background-color: #1e1c1a;
-    color: #f2ede8;
-    font-size: 10pt;
-}
-
-QMainWindow, QScrollArea, QAbstractScrollArea {
-    background-color: #1e1c1a;
-    border: none;
-}
-
-QLabel {
-    background: transparent;
-    color: #f2ede8;
-}
-
-QGroupBox {
-    background-color: #262320;
-    border: 1px solid #3d3833;
-    border-radius: 6px;
-    margin-top: 14px;
-    padding: 10px 8px 8px 8px;
-    font-weight: 600;
-}
-
-QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    left: 10px;
-    padding: 0 4px;
-    color: #ff8c1a;
-}
-
-QPushButton {
-    background-color: #ff8c1a;
-    color: #1e1c1a;
-    border: none;
-    border-radius: 5px;
-    padding: 6px 14px;
-    font-weight: 600;
-}
-
-QPushButton:hover {
-    background-color: #ff9f40;
-}
-
-QPushButton:pressed {
-    background-color: #e67512;
-}
-
-QPushButton:disabled {
-    background-color: #5a544d;
-    color: #b8b0a8;
-}
-
-QPushButton:checkable:checked {
-    background-color: #e67512;
-}
-
-QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox, QDoubleSpinBox {
-    background-color: #2f2b27;
-    color: #f2ede8;
-    border: 1px solid #3d3833;
-    border-radius: 4px;
-    padding: 3px 6px;
-    selection-background-color: #ff8c1a;
-    selection-color: #1e1c1a;
-}
-
-QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
-    border: 1px solid #ff8c1a;
-}
-
-QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {
-    color: #b8b0a8;
-    background-color: #262320;
-}
-
-QCheckBox {
-    spacing: 8px;
-}
-
-QCheckBox::indicator {
-    width: 15px;
-    height: 15px;
-    border: 1px solid #3d3833;
-    border-radius: 3px;
-    background-color: #2f2b27;
-}
-
-QCheckBox::indicator:checked {
-    background-color: #ff8c1a;
-    border: 1px solid #ff8c1a;
-}
-
-QCheckBox::indicator:hover {
-    border: 1px solid #ff8c1a;
-}
-
-QScrollBar:vertical {
-    background: #1e1c1a;
-    width: 12px;
-    margin: 0;
-}
-
-QScrollBar::handle:vertical {
-    background: #5a544d;
-    border-radius: 5px;
-    min-height: 24px;
-}
-
-QScrollBar::handle:vertical:hover {
-    background: #ff8c1a;
-}
-
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    height: 0;
-}
-
-QScrollBar:horizontal {
-    background: #1e1c1a;
-    height: 12px;
-    margin: 0;
-}
-
-QScrollBar::handle:horizontal {
-    background: #5a544d;
-    border-radius: 5px;
-    min-width: 24px;
-}
-
-QScrollBar::handle:horizontal:hover {
-    background: #ff8c1a;
-}
-
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-    width: 0;
-}
-
-QTableWidget {
-    background-color: #262320;
-    alternate-background-color: #2a2724;
-    gridline-color: #3d3833;
-    border: 1px solid #3d3833;
-    border-radius: 4px;
-    selection-background-color: #ff8c1a;
-    selection-color: #1e1c1a;
-}
-
-QHeaderView::section {
-    background-color: #2f2b27;
-    color: #ff8c1a;
-    padding: 4px;
-    border: none;
-    border-bottom: 1px solid #3d3833;
-    font-weight: 600;
-}
-
-QTableWidget::item:selected {
-    background-color: #ff8c1a;
-    color: #1e1c1a;
-}
-
-QMessageBox, QFileDialog {
-    background-color: #1e1c1a;
-}
-
-QToolTip {
-    background-color: #2f2b27;
-    color: #f2ede8;
-    border: 1px solid #ff8c1a;
-    padding: 4px;
-}
-"""
-
-
 class EmittingStream(QObject):
     """A stdout-like object that emits one signal per complete printed line.
 
@@ -333,228 +142,259 @@ class EmittingStream(QObject):
             self._buffer = ""
 
 
-class NoScrollSpinBox(QSpinBox):
-    """A QSpinBox that ignores the mouse wheel so scrolling the page doesn't change it."""
-
-    def wheelEvent(self, event):
-        event.ignore()
-
-
-class NoScrollDoubleSpinBox(QDoubleSpinBox):
-    """A QDoubleSpinBox that ignores the mouse wheel so scrolling the page doesn't change it."""
-
-    def wheelEvent(self, event):
-        event.ignore()
-
-
-class ClampedZoomTextEdit(QTextEdit):
-    """A QTextEdit whose built-in Ctrl+Wheel zoom is clamped to a sane range."""
-
-    MIN_POINT_SIZE = 6.0
-    MAX_POINT_SIZE = 28.0
-
-    def wheelEvent(self, event):
-        super().wheelEvent(event)
-        doc = self.document()
-        font = doc.defaultFont()
-        size = font.pointSizeF()
-        if size <= 0:
-            return
-        clamped = max(self.MIN_POINT_SIZE, min(self.MAX_POINT_SIZE, size))
-        if clamped != size:
-            font.setPointSizeF(clamped)
-            doc.setDefaultFont(font)
-
-
 class PipelineWorker(QObject):
     log_line = Signal(str)
-    finished = Signal(bool, str)
+    progress = Signal(float, str)
+    # status is one of "ok", "cancelled", "failed"
+    finished = Signal(str, str)
 
     def __init__(self, kwargs):
         super().__init__()
         self.kwargs = kwargs
+        self._cancel = threading.Event()
+
+    def cancel(self):
+        self._cancel.set()
+
+    def _on_progress(self, percent, label):
+        # Every stage boundary doubles as a cancellation point.
+        if self._cancel.is_set():
+            raise pipeline.PipelineCancelled()
+        self.progress.emit(percent, label)
 
     def run(self):
         stream = EmittingStream()
         stream.text_written.connect(self.log_line)
         try:
             with contextlib.redirect_stdout(stream):
-                pipeline.run_pipeline(**self.kwargs)
+                pipeline.run_pipeline(progress_callback=self._on_progress, **self.kwargs)
             stream.flush_remaining()
-            self.finished.emit(True, "Pipeline completed successfully.")
+            self.finished.emit("ok", "Pipeline completed successfully.")
+        except pipeline.PipelineCancelled:
+            stream.flush_remaining()
+            self.finished.emit("cancelled", "Run cancelled.")
         except Exception:  # noqa: BLE001 - surface any pipeline failure as a dialog, not a silent thread death
             stream.flush_remaining()
-            self.finished.emit(False, traceback.format_exc())
+            self.finished.emit("failed", traceback.format_exc())
 
 
-class MainWindow(QMainWindow):
+class PipelinePage(QWidget):
+    """The pipeline runner as an embeddable page (used by orchestrium and MainWindow)."""
+
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Orchestrium")
-        available = QApplication.primaryScreen().availableGeometry()
-        self.resize(min(860, available.width()), min(780, available.height()))
+        self.setObjectName("pageRoot")
 
         self.pipeline_thread = None
         self.worker = None
+        self._closing = False
 
         defaults = inspect.signature(pipeline.run_pipeline).parameters
 
-        central = QWidget()
-        layout = QVBoxLayout(central)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(24, 20, 24, 20)
+        outer.setSpacing(14)
+        outer.addWidget(
+            app_style.make_page_header(
+                "Pipeline", "Warp the orchestra to follow your recording and mix the master."
+            )
+        )
 
+        # -- scrollable settings -------------------------------------------------
         scroll_area = QScrollArea()
+        self.scroll_area = scroll_area
         scroll_area.setWidgetResizable(True)
-        scroll_area.setWidget(central)
-        self.setCentralWidget(scroll_area)
+        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self._scroll_anim = QPropertyAnimation(scroll_area.verticalScrollBar(), b"value", self)
+        self._scroll_anim.setDuration(280)
+        self._scroll_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._scroll_before_advanced = 0
+        self._scroll_on_finished = None
+        self._scroll_anim.finished.connect(self._scroll_anim_finished)
+        settings = QWidget()
+        self.settings_widget = settings
+        settings_layout = QVBoxLayout(settings)
+        settings_layout.setContentsMargins(0, 0, 8, 0)
+        settings_layout.setSpacing(14)
+        scroll_area.setWidget(settings)
+        outer.addWidget(scroll_area, 1)
 
-        self.solo_edit = self._add_path_row(
-            layout,
-            "Solo MIDI:",
-            self._default_path("data/raw/SOLO.mid"),
-            "MIDI files (*.mid *.midi)",
+        inputs_card, inputs_layout = app_style.make_card("Inputs")
+        grid = app_style.make_grid()
+        midi_filter = "MIDI files (*.mid *.midi)"
+        self.solo_edit = app_style.add_path_row(
+            grid, 0, "Solo MIDI", self._default_path("data/raw/SOLO.mid"), file_filter=midi_filter
         )
-        self.orchestra_edit = self._add_path_row(
-            layout,
-            "Orchestra MIDI:",
+        self.orchestra_edit = app_style.add_path_row(
+            grid,
+            1,
+            "Orchestra MIDI",
             self._default_path("data/raw/ORCHESTRA.mid"),
-            "MIDI files (*.mid *.midi)",
+            file_filter=midi_filter,
         )
-        self.rec_edit = self._add_path_row(
-            layout,
-            "Recording:",
+        self.rec_edit = app_style.add_path_row(
+            grid,
+            2,
+            "Recording",
             self._default_path("data/raw/REC.mp3"),
-            "Audio files (*.mp3 *.wav *.m4a)",
+            file_filter="Audio files (*.mp3 *.wav *.m4a)",
         )
-        self.output_dir_edit = self._add_path_row(
-            layout,
-            "Output Folder:",
+        inputs_layout.addLayout(grid)
+        settings_layout.addWidget(inputs_card)
+
+        output_card, output_layout = app_style.make_card("Output")
+        grid = app_style.make_grid()
+        self.output_dir_edit = app_style.add_path_row(
+            grid,
+            0,
+            "Output folder",
             str(app_paths.DEFAULT_OUTPUT_DIR),
             is_dir=True,
+            fallback_dir=PROJECT_ROOT / "data" / "output",
         )
-        self.output_filename_edit = self._add_text_row(
-            layout,
-            "Output Filename:",
-            Path(pipeline.DEFAULT_OUTPUT_FILENAME).stem,
-            suffix=".mp3",
-        )
+        self.output_filename_edit = QLineEdit(Path(pipeline.DEFAULT_OUTPUT_FILENAME).stem)
+        grid.addWidget(QLabel("Filename"), 1, 0)
+        grid.addWidget(self.output_filename_edit, 1, 1)
+        suffix_label = QLabel(".mp3")
+        suffix_label.setObjectName("muted")
+        grid.addWidget(suffix_label, 1, 2)
+        output_layout.addLayout(grid)
+        settings_layout.addWidget(output_card)
 
-        gain_row = QHBoxLayout()
+        mix_card, mix_layout = app_style.make_card("Mix")
         self.orchestra_gain_spin = self._make_double_spin(
             defaults["orchestra_gain_db"].default, -24.0, 24.0, 1, 0.5
         )
-        self.orchestra_gain_spin.setMinimumWidth(90)
         self.solo_gain_spin = self._make_double_spin(
             defaults["solo_gain_db"].default, -24.0, 24.0, 1, 0.5
         )
-        self.solo_gain_spin.setMinimumWidth(90)
-        gain_row.addWidget(QLabel("Orchestra Gain (dB):"))
-        gain_row.addWidget(self.orchestra_gain_spin)
-        gain_row.addWidget(QLabel("Solo Gain (dB):"))
-        gain_row.addWidget(self.solo_gain_spin)
-        self.polyphony_checkbox = QCheckBox("Polyphony Detection")
+        for spin in (self.orchestra_gain_spin, self.solo_gain_spin):
+            spin.setMinimumWidth(90)
+        # Narrow two-row grid (rather than one wide row) so the card never
+        # forces the page wider than a modest window.
+        gain_grid = QGridLayout()
+        gain_grid.setHorizontalSpacing(10)
+        gain_grid.setVerticalSpacing(8)
+        gain_grid.addWidget(QLabel("Orchestra gain (dB)"), 0, 0)
+        gain_grid.addWidget(self.orchestra_gain_spin, 0, 1)
+        gain_grid.addWidget(QLabel("Solo gain (dB)"), 1, 0)
+        gain_grid.addWidget(self.solo_gain_spin, 1, 1)
+        gain_grid.setColumnStretch(2, 1)
+        mix_layout.addLayout(gain_grid)
+        self.polyphony_checkbox = QCheckBox("Polyphony detection")
         self.polyphony_checkbox.setChecked(False)
-        gain_row.addWidget(self.polyphony_checkbox)
-        gain_row.addStretch()
-        layout.addLayout(gain_row)
+        mix_layout.addWidget(self.polyphony_checkbox)
+        settings_layout.addWidget(mix_card)
 
-        self.advanced_toggle = QPushButton("▸ Advanced")
+        self.advanced_toggle = QPushButton("▸  Advanced settings")
+        self.advanced_toggle.setObjectName("ghostButton")
         self.advanced_toggle.setCheckable(True)
         self.advanced_toggle.toggled.connect(self.toggle_advanced_panel)
-        layout.addWidget(self.advanced_toggle)
+        settings_layout.addWidget(self.advanced_toggle)
 
         self.advanced_panel = QWidget()
         advanced_layout = QVBoxLayout(self.advanced_panel)
         advanced_layout.setContentsMargins(0, 0, 0, 0)
+        advanced_layout.setSpacing(14)
 
-        self.sfizz_edit = self._add_path_row(
-            advanced_layout,
-            "Sfizz_Render Executable:",
+        paths_card, paths_layout = app_style.make_card("Tools & samples")
+        grid = app_style.make_grid()
+        self.sfizz_edit = app_style.add_path_row(
+            grid,
+            0,
+            "sfizz_render",
             self._default_path("bin/sfizz_render_1.2.2.exe"),
-            "Executable (*.exe)",
+            file_filter="Executable (*.exe)",
         )
-
-        self.vpo_edit = self._add_path_row(
-            advanced_layout,
-            "VPO Sample Library Folder:",
-            self._default_path("VPO"),
-            is_dir=True,
+        self.vpo_edit = app_style.add_path_row(
+            grid, 1, "VPO sample library", self._default_path("VPO"), is_dir=True
         )
+        paths_layout.addLayout(grid)
 
         self.keep_temp_checkbox = QCheckBox("Keep temporary/intermediate files")
         self.keep_temp_checkbox.setChecked(False)
-        advanced_layout.addWidget(self.keep_temp_checkbox)
+        paths_layout.addWidget(self.keep_temp_checkbox)
 
         self.ghost_filter_checkbox = QCheckBox("Filter ghost pitches in quiet regions")
         self.ghost_filter_checkbox.setChecked(True)
-        advanced_layout.addWidget(self.ghost_filter_checkbox)
+        paths_layout.addWidget(self.ghost_filter_checkbox)
 
         skip_track_row = QHBoxLayout()
         self.skip_track_spin = NoScrollSpinBox()
         self.skip_track_spin.setRange(-1, 999)
         self.skip_track_spin.setValue(-1)
         self.skip_track_spin.setMinimumWidth(90)
-        skip_track_row.addWidget(QLabel("Skip track # (-1 = none):"))
+        skip_track_row.addWidget(QLabel("Skip track # (-1 = none)"))
         skip_track_row.addWidget(self.skip_track_spin)
         skip_track_row.addStretch()
-        advanced_layout.addLayout(skip_track_row)
+        paths_layout.addLayout(skip_track_row)
+        advanced_layout.addWidget(paths_card)
 
         self.advanced_spins = {}
-        advanced_layout.addWidget(
+        tuning_card, tuning_layout = app_style.make_card("Tuning")
+        tuning_layout.addWidget(
             self._build_spec_group("Ghost Pitch Filtering", GHOST_FILTER_SPECS, defaults)
         )
-        advanced_layout.addWidget(
+        tuning_layout.addWidget(
             self._build_spec_group("Rest Detection", REST_DETECTION_SPECS, defaults)
         )
-        advanced_layout.addWidget(
+        tuning_layout.addWidget(
             self._build_spec_group("Warp Curve Fitting", WARP_CURVE_SPECS, defaults)
         )
+        advanced_layout.addWidget(tuning_card)
 
         self.advanced_panel.setVisible(False)
-        layout.addWidget(self.advanced_panel)
+        settings_layout.addWidget(self.advanced_panel)
+        settings_layout.addStretch()
 
+        # -- run / progress card (always visible) -----------------------------------
+        run_card, run_layout = app_style.make_card()
+
+        button_row = QHBoxLayout()
         self.run_button = QPushButton("Generate Recording")
+        self.run_button.setObjectName("primaryButton")
         self.run_button.clicked.connect(self.run_pipeline_clicked)
-        layout.addWidget(self.run_button)
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setObjectName("dangerButton")
+        self.cancel_button.setEnabled(False)
+        self.cancel_button.clicked.connect(self.cancel_run)
+        self.pill = app_style.make_pill()
+        button_row.addWidget(self.run_button)
+        button_row.addWidget(self.cancel_button)
+        button_row.addStretch()
+        button_row.addWidget(self.pill)
+        run_layout.addLayout(button_row)
 
-        self.log = ClampedZoomTextEdit()
-        self.log.setReadOnly(True)
-        layout.addWidget(self.log)
+        stage_row = QHBoxLayout()
+        self.stage_label = QLabel("Ready")
+        self.stage_label.setObjectName("stageLabel")
+        self.percent_label = QLabel("0%")
+        self.percent_label.setObjectName("percentLabel")
+        stage_row.addWidget(self.stage_label)
+        stage_row.addStretch()
+        stage_row.addWidget(self.percent_label)
+        run_layout.addLayout(stage_row)
 
-    # -- screen-size cap --------------------------------------------------
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 1000)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False)
+        run_layout.addWidget(self.progress_bar)
 
-    def _clamp_max_size_to_screen(self):
-        screen = self.screen()
-        if screen is None:
-            return
-        available = screen.availableGeometry()
-        self.setMaximumSize(available.width(), available.height())
+        self.log_toggle = QPushButton("▸  Show log")
+        self.log_toggle.setObjectName("ghostButton")
+        self.log_toggle.setCheckable(True)
+        self.log_toggle.toggled.connect(self.toggle_log)
+        run_layout.addWidget(self.log_toggle)
 
-    def showEvent(self, event):
-        super().showEvent(event)
-        self._clamp_max_size_to_screen()
+        self.log = app_style.make_log_edit()
+        self.log.setMinimumHeight(170)
+        self.log.setVisible(False)
+        run_layout.addWidget(self.log)
 
-    def moveEvent(self, event):
-        super().moveEvent(event)
-        self._clamp_max_size_to_screen()
-
-    def closeEvent(self, event):
-        if self.pipeline_thread is not None and self.pipeline_thread.isRunning():
-            reply = QMessageBox.question(
-                self,
-                "In Progress",
-                "A task is still running. Exit and cancel it?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if reply != QMessageBox.StandardButton.Yes:
-                event.ignore()
-                return
-
-            orchestra_player.terminate_active_render()
-            self.pipeline_thread.quit()
-            self.pipeline_thread.wait(5000)
-
-        event.accept()
+        outer.addWidget(run_card)
 
     # -- construction helpers --------------------------------------------
 
@@ -572,42 +412,6 @@ class MainWindow(QMainWindow):
         spin.setValue(float(value))
         return spin
 
-    def _add_path_row(self, layout, label_text, default_value, file_filter=None, is_dir=False):
-        row = QHBoxLayout()
-        edit = QLineEdit(default_value)
-        browse_btn = QPushButton("Browse…")
-        if is_dir:
-            browse_btn.clicked.connect(lambda: self._browse_for_dir(edit))
-        else:
-            browse_btn.clicked.connect(lambda: self._browse_for(edit, file_filter))
-        row.addWidget(QLabel(label_text))
-        row.addWidget(edit)
-        row.addWidget(browse_btn)
-        layout.addLayout(row)
-        return edit
-
-    def _add_text_row(self, layout, label_text, default_value, suffix=None):
-        row = QHBoxLayout()
-        edit = QLineEdit(default_value)
-        row.addWidget(QLabel(label_text))
-        row.addWidget(edit)
-        if suffix:
-            row.addWidget(QLabel(suffix))
-        layout.addLayout(row)
-        return edit
-
-    def _browse_for(self, line_edit, file_filter):
-        start_dir = line_edit.text() or str(PROJECT_ROOT / "data" / "raw")
-        path, _ = QFileDialog.getOpenFileName(self, "Select file", start_dir, file_filter)
-        if path:
-            line_edit.setText(str(Path(path)))
-
-    def _browse_for_dir(self, line_edit):
-        start_dir = line_edit.text() or str(PROJECT_ROOT / "data" / "output")
-        path = QFileDialog.getExistingDirectory(self, "Select output folder", start_dir)
-        if path:
-            line_edit.setText(str(Path(path)))
-
     def _build_spec_group(self, title, specs, defaults):
         group = QGroupBox(title)
         form = QFormLayout(group)
@@ -624,11 +428,96 @@ class MainWindow(QMainWindow):
             form.addRow(label, spin)
         return group
 
+    # -- public hooks for the host window ------------------------------------
+
+    def set_midi_paths(self, solo_path=None, orchestra_path=None):
+        """Pre-fill the MIDI inputs (e.g. after the Slicer writes new files)."""
+        if solo_path:
+            self.solo_edit.setText(str(solo_path))
+        if orchestra_path:
+            self.orchestra_edit.setText(str(orchestra_path))
+
+    def is_running(self):
+        return self.pipeline_thread is not None and self.pipeline_thread.isRunning()
+
+    def request_close(self, window) -> bool:
+        """Call from a window's closeEvent. Returns False if the user backed out.
+
+        If a run is in flight, cancels it and waits for the worker thread to
+        actually finish before returning -- letting Qt tear down a QThread whose
+        run() is still executing is what prints the "QThread: Destroyed while
+        thread is still running" error on exit.
+        """
+        if not self.is_running():
+            return True
+        reply = QMessageBox.question(
+            window,
+            "In Progress",
+            "A task is still running. Exit and cancel it?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return False
+
+        self._closing = True
+        self.cancel_run()
+        window.hide()
+        self.pipeline_thread.wait()
+        return True
+
     # -- behavior -----------------------------------------------------------
 
+    def _animate_scroll_to(self, target, on_finished=None):
+        bar = self.scroll_area.verticalScrollBar()
+        self._scroll_anim.stop()
+        self._scroll_on_finished = on_finished
+        self._scroll_anim.setStartValue(bar.value())
+        self._scroll_anim.setEndValue(int(target))
+        self._scroll_anim.start()
+
+    def _scroll_anim_finished(self):
+        callback, self._scroll_on_finished = self._scroll_on_finished, None
+        if callback is not None:
+            callback()
+
+    def _scroll_to_advanced(self):
+        if not self.advanced_toggle.isChecked():
+            return  # closed again before this ran
+        bar = self.scroll_area.verticalScrollBar()
+        target = min(self.advanced_toggle.y() - 4, bar.maximum())
+        self._animate_scroll_to(max(target, bar.value()))
+
     def toggle_advanced_panel(self, checked):
-        self.advanced_panel.setVisible(checked)
-        self.advanced_toggle.setText("▾ Advanced" if checked else "▸ Advanced")
+        self.advanced_toggle.setText("▾  Advanced settings" if checked else "▸  Advanced settings")
+        bar = self.scroll_area.verticalScrollBar()
+        if checked:
+            # Remember where the user was so closing the panel can put them back.
+            self._scroll_before_advanced = bar.value()
+            self.advanced_panel.setVisible(True)
+            # The scroll range only grows once the layout has processed the newly
+            # visible panel, so compute the target on the next event-loop turn,
+            # then bring the toggle button to the top so the new settings are in view.
+            QTimer.singleShot(0, self._scroll_to_advanced)
+        else:
+            # Scroll back first, then hide, so the view doesn't jump.
+            self._animate_scroll_to(
+                self._scroll_before_advanced,
+                on_finished=lambda: self.advanced_panel.setVisible(False),
+            )
+
+    def toggle_log(self, checked):
+        self.log.setVisible(checked)
+        self.log_toggle.setText("▾  Hide log" if checked else "▸  Show log")
+
+    def cancel_run(self):
+        if not self.is_running():
+            return
+        self.cancel_button.setEnabled(False)
+        self.stage_label.setText("Cancelling…")
+        if self.worker is not None:
+            self.worker.cancel()
+        orchestra_player.terminate_active_render()
 
     def run_pipeline_clicked(self):
         required = {
@@ -641,15 +530,13 @@ class MainWindow(QMainWindow):
         for label, path in required.items():
             if not path or not Path(path).exists():
                 QMessageBox.warning(
-                    self, "Missing input", f"{label} path is missing or doesn't exist."
+                    self.window(), "Missing input", f"{label} path is missing or doesn't exist."
                 )
                 return
 
         output_dir_text = self.output_dir_edit.text().strip()
         if output_dir_text and Path(output_dir_text).exists() and not Path(output_dir_text).is_dir():
-            QMessageBox.warning(
-                self, "Missing input", "Output Folder path is not a directory."
-            )
+            QMessageBox.warning(self.window(), "Missing input", "Output Folder path is not a directory.")
             return
 
         kwargs = {
@@ -671,34 +558,92 @@ class MainWindow(QMainWindow):
             kwargs[name] = spin.value()
 
         self.log.clear()
+        self.log_toggle.setChecked(True)
         self.run_button.setEnabled(False)
+        self.cancel_button.setEnabled(True)
+        self._set_progress(0.0, "Starting…")
+        app_style.set_pill(self.pill, "Running", "running")
 
+        # Both objects stay referenced until the next run replaces them: a
+        # QThread must never be garbage-collected while still running.
         self.pipeline_thread = QThread()
         self.worker = PipelineWorker(kwargs)
         self.worker.moveToThread(self.pipeline_thread)
         self.pipeline_thread.started.connect(self.worker.run)
         self.worker.log_line.connect(self.append_log)
+        self.worker.progress.connect(self._set_progress)
         self.worker.finished.connect(self.on_pipeline_finished)
-        self.worker.finished.connect(self.pipeline_thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.pipeline_thread.finished.connect(self.pipeline_thread.deleteLater)
+        # Direct, not queued: quit() must run on the worker thread itself, since
+        # request_close() may be blocking the main thread in wait() -- a queued
+        # quit would never be delivered and the exit would deadlock.
+        self.worker.finished.connect(
+            self.pipeline_thread.quit, Qt.ConnectionType.DirectConnection
+        )
         self.pipeline_thread.start()
 
     def append_log(self, text):
         self.log.append(text)
 
-    def on_pipeline_finished(self, success, message):
+    def _set_progress(self, percent, label):
+        self.progress_bar.setValue(int(percent * 10))
+        self.percent_label.setText(f"{percent:.0f}%")
+        self.stage_label.setText(label)
+
+    def on_pipeline_finished(self, status, message):
+        if self._closing:
+            return
         self.run_button.setEnabled(True)
-        if success:
-            QMessageBox.information(self, "Done", message)
+        self.cancel_button.setEnabled(False)
+        if status == "ok":
+            self._set_progress(100.0, "Done")
+            app_style.set_pill(self.pill, "Done", "done")
+            QMessageBox.information(self.window(), "Done", message)
+        elif status == "cancelled":
+            self._set_progress(0.0, "Cancelled")
+            app_style.set_pill(self.pill, "Cancelled", "cancelled")
+            # Collapse the log box again; its text is kept until the next run
+            # (run_pipeline_clicked clears it), and "Show log" reopens it.
+            self.log_toggle.setChecked(False)
         else:
-            QMessageBox.critical(self, "Pipeline failed", message)
+            self.stage_label.setText("Failed")
+            app_style.set_pill(self.pill, "Failed", "failed")
+            QMessageBox.critical(self.window(), "Pipeline failed", message)
+
+
+class MainWindow(QMainWindow):
+    """Standalone host for the pipeline page (python src\\main_gui.py)."""
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Orchestrium")
+        available = QApplication.primaryScreen().availableGeometry()
+        self.setMinimumSize(700, 480)
+        self.resize(
+            min(860, int(available.width() * 0.85)),
+            min(720, int(available.height() * 0.85)),
+        )
+        self.page = PipelinePage()
+        self.setCentralWidget(self.page)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        app_style.clamp_max_size_to_screen(self)
+
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        app_style.clamp_max_size_to_screen(self)
+
+    def closeEvent(self, event):
+        if self.page.request_close(self):
+            event.accept()
+        else:
+            event.ignore()
 
 
 def main():
     app = QApplication(sys.argv)
-    app.setStyleSheet(DARK_ORANGE_STYLESHEET)
-    icon = _load_app_icon()
+    app.setStyleSheet(app_style.STYLESHEET)
+    icon = app_style.load_app_icon()
     app.setWindowIcon(icon)
     window = MainWindow()
     window.setWindowIcon(icon)

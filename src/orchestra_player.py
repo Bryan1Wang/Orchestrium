@@ -34,7 +34,12 @@ def terminate_active_render():
 
 
 def render_precise_gm_orchestra(
-    sfizz_path, midi_filename, final_master_filename, vpo_dir=None, skip_track=None
+    sfizz_path,
+    midi_filename,
+    final_master_filename,
+    vpo_dir=None,
+    skip_track=None,
+    progress_callback=None,
 ):
     global _active_process
 
@@ -174,6 +179,11 @@ def render_precise_gm_orchestra(
     # -----------------------------
 
     for track_index, track in enumerate(mid.tracks):
+        # Per-track granularity is enough for a progress bar; the callback may
+        # raise to abort the render (the finally blocks below clean up temps).
+        if progress_callback is not None:
+            progress_callback(track_index / len(mid.tracks))
+
         if skip_track is not None and track_index == skip_track:
             print(f"Skipping track {track_index} (user-specified skip)")
             continue

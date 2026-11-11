@@ -43,6 +43,55 @@ class _CurveFitKwargs(TypedDict):
     start_speed_window_seconds: float
 
 
+class PipelineCancelled(Exception):
+    """Raised from inside a progress callback to abort a run at a stage boundary."""
+
+
+# (label, relative weight) per stage -- weights roughly track wall-clock cost
+# (transcription and the sfizz render dominate) so the progress bar moves at a
+# believable pace instead of jumping a tenth per stage.
+_STAGES = [
+    ("Reading score", 2),
+    ("Transcribing recording", 28),
+    ("Aligning performance", 8),
+    ("Detecting rests", 6),
+    ("Fitting tempo curve", 4),
+    ("Rendering orchestra", 38),
+    ("Splicing recording", 5),
+    ("Aligning intro", 3),
+    ("Mixing master", 6),
+]
+_RENDER_STAGE = 5
+
+
+class _ProgressReporter:
+    """Maps (stage, fraction-within-stage) onto a 0-100 percent for a callback.
+
+    A no-op when `callback` is None. The callback may raise PipelineCancelled
+    to abort the run at the next stage boundary.
+    """
+
+    def __init__(self, callback):
+        self.callback = callback
+        total = sum(weight for _, weight in _STAGES)
+        self._starts = []
+        running = 0.0
+        for _, weight in _STAGES:
+            self._starts.append(100.0 * running / total)
+            running += weight
+        self._spans = [100.0 * weight / total for _, weight in _STAGES]
+
+    def __call__(self, stage, fraction=0.0):
+        if self.callback is None:
+            return
+        percent = self._starts[stage] + self._spans[stage] * max(0.0, min(1.0, fraction))
+        self.callback(percent, _STAGES[stage][0])
+
+    def done(self):
+        if self.callback is not None:
+            self.callback(100.0, "Done")
+
+
 def midi_to_note_name(midi_num: int) -> str:
     """Converts a MIDI note number to a human-readable string (e.g., 60 -> C4)"""
     notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -93,8 +142,10 @@ def run_pipeline(
     tempo_window_seconds=5.0,
     tempo_window_min_points=4,
     start_speed_window_seconds=10.0,
+    progress_callback=None,
 ):
-    output_dir = Path(output_dir) if output_dir else app_paths.DEFAULT_OUTPUT_DIR
+    report = _ProgressReporter(progress_callback)
+    output_dir =Path(output_dir) if output_dir else app_paths.DEFAULT_OUTPUT_DIR
     output_filename = (output_filename or DEFAULT_OUTPUT_FILENAME).strip()
     if not output_filename.lower().endswith(".mp3"):
         output_filename += ".mp3"
@@ -121,11 +172,13 @@ def run_pipeline(
     print("Starting Music Alignment...")
 
     # 1. Parse the mathematically perfect sheet music score
+    report(0)
     print("Parsing sheet music MIDI score...")
     sheet_music_sequence = score_reader.extract_notes(solo_midi_path)
     print(f"Loaded {len(sheet_music_sequence)} chord/note events from the score.\n")
 
     # 2. Transcribe the raw audio performance using Basic Pitch
+    report(1)
     print("Transcribing live performance audio...")
     player_onset_sequence = transcribe.transcribe(
         rec_audio_path,
@@ -138,6 +191,7 @@ def run_pipeline(
     print(f"Extracted {len(player_onset_sequence)} performance events from audio.\n")
 
     # 3. Align the performance to the score using the DTW algorithm
+    report(2)
     print("Aligning performance to sheet music...")
     alignment_results = tempo_sync.align(
         player_onset_sequence, sheet_music_sequence, polyphony_detection=polyphony_detection
@@ -179,6 +233,7 @@ def run_pipeline(
     # Verified tutti rests need a warp curve to check expected player-time
     # windows against -- build the plain (unshifted, unsplit) curve just for
     # that lookup, per rest_utils.get_verified_tutti_rests's docstring.
+    report(3)
     plain_warp = create_midi.build_warp_curve(alignment_results, **curve_fit_kwargs)
     tutti_rests = rest_utils.get_verified_tutti_rests(
         warp_time=plain_warp,
@@ -197,6 +252,7 @@ def run_pipeline(
     )
     output_midi_path = output_dir / "output.mid"
 
+    report(4)
     warp_time, diagnostics, intro_shift = create_midi.build_warp_curve(
         alignment_results,
         tutti_rests=tutti_rests,
@@ -211,6 +267,7 @@ def run_pipeline(
     )
 
     # Render the warped MIDI to audio via sfizz.
+    report(_RENDER_STAGE)
     orchestra_rendered_path = output_dir / "orchestra_rendered.mp3"
     orchestra_audio = orchestra_player.render_precise_gm_orchestra(
         sfizz_path=sfizz_exe_path,
@@ -218,11 +275,13 @@ def run_pipeline(
         final_master_filename=str(orchestra_rendered_path),
         vpo_dir=vpo_dir,
         skip_track=skip_track,
+        progress_callback=lambda fraction: report(_RENDER_STAGE, fraction),
     )
 
     # Splice real silence into the recording at each extended tutti rest.
     # RestRecord player-time fields are relative to the pre-intro-shift
     # (i.e. raw REC.mp3) timeline, so no offset adjustment is needed here.
+    report(6)
     extended_path = audio_utils.extend_rec_pauses(
         diagnostics or [], rec_path=rec_audio_path, output_path=output_dir / "REC_extended.mp3"
     )
@@ -231,6 +290,7 @@ def run_pipeline(
     # see mute_and_pad_intro's docstring) and pad back exactly enough silence
     # so the recording's real content ends up intro_shift seconds later,
     # matching where the warped MIDI's corresponding note lands.
+    report(7)
     first_score_time = sheet_music_sequence[0][0]
     entrance_estimate = plain_warp(first_score_time)
     mute_time = max(0.0, entrance_estimate - 1.0)
@@ -243,8 +303,9 @@ def run_pipeline(
     solo_audio.export(solo_final_path, format="mp3")
     #print(f"Wrote aligned solo audio to {solo_final_path}")
 
+    report(8)
     if orchestra_audio is not None:
-        final_mix = audio_utils.overlay_with_gain(
+        final_mix =audio_utils.overlay_with_gain(
             orchestra_audio,
             solo_audio,
             orchestra_gain_db=orchestra_gain_db,
@@ -272,6 +333,8 @@ def run_pipeline(
             )
     else:
         print("Orchestra render produced nothing; skipping final mix.")
+
+    report.done()
 
 
 def main():
