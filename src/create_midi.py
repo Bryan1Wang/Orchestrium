@@ -810,6 +810,7 @@ def build_warp_curve(
     score_start: float = 0.0,
     intro_lead_in_seconds: float = 1.0,
     start_speed_window_seconds: float = 10.0,
+    intro_score_tempo_weight_pct: float = 0.0,
     return_diagnostics: Literal[False] = False,
 ) -> WarpTime: ...
 
@@ -835,6 +836,7 @@ def build_warp_curve(
     score_start: float = 0.0,
     intro_lead_in_seconds: float = 1.0,
     start_speed_window_seconds: float = 10.0,
+    intro_score_tempo_weight_pct: float = 0.0,
     *,
     return_diagnostics: Literal[True],
 ) -> tuple[WarpTime, list[RestRecord] | None, float]: ...
@@ -860,6 +862,7 @@ def build_warp_curve(
     score_start: float = 0.0,
     intro_lead_in_seconds: float = 1.0,
     start_speed_window_seconds: float = 10.0,
+    intro_score_tempo_weight_pct: float = 0.0,
     return_diagnostics: bool = False,
 ) -> WarpTime | tuple[WarpTime, list[RestRecord] | None, float]:
     """Build a score_time -> player_time warp function from DTW anchors.
@@ -947,6 +950,10 @@ def build_warp_curve(
         start_speed = _estimate_start_speed(
             good_times, good_warped, start_speed_window_seconds
         )
+        # Blend the measured (interpolated) start speed with the score's own
+        # tempo (speed 1.0 = score pace): weight% score + remaining% measured.
+        w = min(max(intro_score_tempo_weight_pct, 0.0), 100.0) / 100.0
+        start_speed = 1.0 * w + start_speed * (1.0 - w)
         intro_shift = _compute_intro_shift(
             good_times, good_warped, start_speed, score_start, intro_lead_in_seconds
         )

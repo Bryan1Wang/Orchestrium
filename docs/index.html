@@ -7,8 +7,7 @@
   <title>Orchestrium — Your Live Performance, Fully Orchestrated</title>
   <meta name="description"
     content="Orchestrium listens to your live performance and automatically builds a real orchestral accompaniment that follows your tempo — then mixes it into one finished track.">
-  <link rel="icon"
-    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231c1c26'/%3E%3Cg stroke='%23f2a44a' stroke-linecap='round'%3E%3Cpath d='M12.49 6.96v6.84q0 8.37-3.06 8.37' stroke-width='1.593' stroke-linejoin='round'/%3E%3Cg transform='matrix(.9 0 0 .9 1.6 1.2)'%3E%3Ccircle cx='8.5' cy='23.3' r='2.2' fill='%23f2a44a' stroke='none'/%3E%3Ccircle cx='8.5' cy='23.3' r='3.4' stroke-width='.77' stroke-dasharray='1.2 1.0'/%3E%3Ccircle cx='8.5' cy='23.3' r='4.6' stroke-width='.55' stroke-dasharray='0.6 1.2'/%3E%3C/g%3E%3Cpath d='M24.19 6.96v6.84q0 8.37-3.06 8.37' stroke-width='1.593' stroke-linejoin='round'/%3E%3Cg transform='matrix(.9 0 0 .9 1.6 1.2)'%3E%3Ccircle cx='21.5' cy='23.3' r='2.2' fill='%23f2a44a' stroke='none'/%3E%3Ccircle cx='21.5' cy='23.3' r='3.4' stroke-width='.77' stroke-dasharray='1.2 1.0'/%3E%3Ccircle cx='21.5' cy='23.3' r='4.6' stroke-width='.55' stroke-dasharray='0.6 1.2'/%3E%3C/g%3E%3Cpath d='M12.49 7.05c2.61-2.7 3.96 3.6 6.66 0 2.25-2.7 3.15 1.8 5.04 0m-11.7 4.05c2.61-2.7 3.96 3.6 6.66 0 2.25-2.7 3.15 1.8 5.04 0' stroke-width='1.62' stroke-linejoin='round'/%3E%3C/g%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="assets/img/icon.svg">
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/demo.css">
 </head>
@@ -19,32 +18,7 @@
   <header class="navbar">
     <div class="container">
       <a class="brand" href="#top">
-        <svg class="mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <rect width="32" height="32" rx="8" fill="#1c1c26" />
-
-          <g transform="translate(1.6, 1.2) scale(0.9)">
-            <path d="M12.1 6.4 L12.1 14.0 Q12.1 23.3 8.7 23.3" stroke="#f2a44a" stroke-width="1.77"
-              stroke-linecap="round" stroke-linejoin="round" />
-            <g stroke="#f2a44a" fill="none" stroke-linecap="round">
-              <circle cx="8.5" cy="23.3" r="2.2" fill="#f2a44a" stroke="none" />
-              <circle cx="8.5" cy="23.3" r="3.4" stroke-width="0.77" stroke-dasharray="1.2 1.0" />
-              <circle cx="8.5" cy="23.3" r="4.6" stroke-width="0.55" stroke-dasharray="0.6 1.2" />
-            </g>
-
-            <path d="M25.1 6.4 L25.1 14.0 Q25.1 23.3 21.7 23.3" stroke="#f2a44a" stroke-width="1.77"
-              stroke-linecap="round" stroke-linejoin="round" />
-            <g stroke="#f2a44a" fill="none" stroke-linecap="round">
-              <circle cx="21.5" cy="23.3" r="2.2" fill="#f2a44a" stroke="none" />
-              <circle cx="21.5" cy="23.3" r="3.4" stroke-width="0.77" stroke-dasharray="1.2 1.0" />
-              <circle cx="21.5" cy="23.3" r="4.6" stroke-width="0.55" stroke-dasharray="0.6 1.2" />
-            </g>
-
-            <g stroke="#f2a44a" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12.1 6.5 C15.0 3.5 16.5 10.5 19.5 6.5 C22.0 3.5 23.0 8.5 25.1 6.5" />
-              <path d="M12.1 11.0 C15.0 8.0 16.5 15.0 19.5 11.0 C22.0 8.0 23.0 13.0 25.1 11.0" />
-            </g>
-          </g>
-        </svg>
+        <img class="mark" src="assets/img/icon.svg" width="32" height="32" alt="">
 
         Orchestrium
       </a>
@@ -52,6 +26,7 @@
         <a href="#demo">Demo</a>
         <a href="#features">Features</a>
         <a href="#how-it-works">How it Works</a>
+        <a href="#the-apps">The Apps</a>
         <a href="#built-with">Built With</a>
         <a class="btn btn-ghost btn-sm" href="https://github.com/Bryan1Wang/Orchestrium" target="_blank"
           rel="noopener">GitHub</a>
@@ -282,8 +257,61 @@
       </div>
     </section>
 
+    <!-- The apps -->
+    <section class="section" id="the-apps">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow">The Apps</span>
+          <h2>Two simple tools, one window</h2>
+          <p>Switch between them from the sidebar. Everything runs locally on your computer.</p>
+        </div>
+
+        <div class="app-block reveal">
+          <div class="app-text">
+            <h3>Accompany</h3>
+            <p>Pick your solo score, the orchestra score and your recording, then press <strong>Generate
+                Recording</strong>. Progress and a live log show each stage as it happens, and the finished mix
+              is saved to the folder you chose.</p>
+            <p>Need more control? Open <strong>Advanced settings</strong> to adjust the mix balance, silence
+              filtering, rest detection and tempo-curve tuning.</p>
+          </div>
+          <figure class="shot">
+            <img src="assets/img/accompany_default.png" width="1375" height="950" loading="lazy"
+              alt="The Accompany page in Orchestrium, with file pickers for the solo MIDI, orchestra MIDI and recording, output folder and filename, mix gain controls, and a Generate Recording button.">
+          </figure>
+        </div>
+
+        <div class="shot-pair reveal">
+          <figure class="shot">
+            <img src="assets/img/accompany_running.png" width="1375" height="950" loading="lazy"
+              alt="Orchestrium mid-run at 62 percent, rendering the orchestra, with the live log showing score reading, transcription, alignment and tempo-curve stages.">
+            <figcaption>Watch each stage run, with a live log.</figcaption>
+          </figure>
+          <figure class="shot">
+            <img src="assets/img/accompany_advanced.png" width="1375" height="950" loading="lazy"
+              alt="The Advanced settings panel in Orchestrium, showing tool paths, ghost-pitch filtering and rest-detection tuning options.">
+            <figcaption>Fine-tune everything under Advanced.</figcaption>
+          </figure>
+        </div>
+
+        <div class="app-block reverse reveal">
+          <div class="app-text">
+            <h3>Score Slicer</h3>
+            <p>Start from a full orchestral score instead of ready-made parts? Load the master MIDI and the slicer
+              lists every track with its instrument and note count.</p>
+            <p>Click the solo track, optionally choose a range of measures, and it writes separate solo and
+              orchestra files, ready to drop into Accompany.</p>
+          </div>
+          <figure class="shot">
+            <img src="assets/img/slicer.png" width="1375" height="950" loading="lazy"
+              alt="The Score Slicer page in Orchestrium, showing a table of a score's tracks with the Solo Violin selected, plus measure range and output file fields.">
+          </figure>
+        </div>
+      </div>
+    </section>
+
     <!-- Built with -->
-    <section class="section" id="built-with">
+    <section class="section alt" id="built-with">
       <div class="container">
         <div class="section-head reveal">
           <span class="eyebrow">Under the Hood</span>
@@ -341,17 +369,7 @@
   <footer>
     <div class="container">
       <div class="foot-brand">
-        <svg class="mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <rect width="32" height="32" rx="8" fill="#1c1c26" />
-          <ellipse cx="11.8" cy="23.3" rx="4.1" ry="3.15" transform="rotate(-18 11.8 23.3)" fill="#f2a44a" />
-          <line x1="15.4" y1="23" x2="15.4" y2="6.4" stroke="#f2a44a" stroke-width="1.9" stroke-linecap="round" />
-          <path
-            d="M15.4 6.7C18.2 7 18.6 8.9 17 9.9 16.2 10.4 15.6 10.7 15.4 11.4 15.55 10.9 15.9 10.5 16.4 10.1 17.5 9.3 17.3 7.7 15.4 7.3Z"
-            fill="#f2a44a" />
-          <path
-            d="M15.4 4.4C19.2 4.75 19.9 8.1 17.4 9.5 16.3 10.1 15.6 10.5 15.4 11.7 15.6 11 16.1 10.5 16.9 10 18.7 8.9 18.4 5.9 15.4 5.5Z"
-            fill="#f2a44a" />
-        </svg>
+        <img class="mark" src="assets/img/icon.svg" width="32" height="32" alt="">
         Orchestrium
       </div>
       <p>&copy; <span id="year">2026</span> Orchestrium — released under the GNU GPLv3 license.</p>

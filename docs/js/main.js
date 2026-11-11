@@ -46,6 +46,53 @@
     bar.style.animationDuration = duration + "s";
   });
 
+  // Click-to-enlarge screenshots (native <dialog>: focus trap, Esc, focus restore)
+  var shotImgs = document.querySelectorAll(".shot img");
+  if (shotImgs.length && typeof HTMLDialogElement === "function") {
+    var dlg = document.createElement("dialog");
+    dlg.className = "lightbox";
+    dlg.setAttribute("aria-label", "Enlarged screenshot");
+    dlg.innerHTML =
+      '<button class="lightbox-close" type="button" aria-label="Close">&times;</button>' +
+      '<img class="lightbox-img" alt="">' +
+      '<p class="lightbox-cap"></p>';
+    document.body.appendChild(dlg);
+    var bigImg = dlg.querySelector(".lightbox-img");
+    var cap = dlg.querySelector(".lightbox-cap");
+
+    var closeLightbox = function () {
+      dlg.classList.remove("open");
+      document.documentElement.classList.remove("lightbox-open");
+      dlg.close();
+    };
+
+    shotImgs.forEach(function (img) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "shot-btn";
+      btn.setAttribute("aria-label", "Enlarge screenshot");
+      img.parentNode.insertBefore(btn, img);
+      btn.appendChild(img);
+      btn.addEventListener("click", function () {
+        bigImg.src = img.currentSrc || img.src;
+        bigImg.alt = img.alt;
+        cap.textContent = img.alt;
+        document.documentElement.classList.add("lightbox-open");
+        dlg.showModal();
+        requestAnimationFrame(function () { dlg.classList.add("open"); });
+      });
+    });
+
+    dlg.querySelector(".lightbox-close").addEventListener("click", closeLightbox);
+    // Click on the backdrop (the dialog element itself, not its contents) closes.
+    dlg.addEventListener("click", function (e) { if (e.target === dlg) closeLightbox(); });
+    // Esc fires "cancel" then "close"; keep the page-scroll lock in sync.
+    dlg.addEventListener("close", function () {
+      dlg.classList.remove("open");
+      document.documentElement.classList.remove("lightbox-open");
+    });
+  }
+
   // Footer year
   var yearEl = document.getElementById("year");
   if (yearEl) yearEl.textContent = new Date().getFullYear();

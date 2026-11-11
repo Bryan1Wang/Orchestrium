@@ -5,7 +5,6 @@ import threading
 import traceback
 from pathlib import Path
 
-
 import splash
 
 # Only when run directly; orchestrium shows its own splash when it imports this.
@@ -108,6 +107,7 @@ WARP_CURVE_SPECS = [
     ("tempo_window_seconds", "Tempo window (s):", "float", 2, 0.1, 120.0, 0.5),
     ("tempo_window_min_points", "Tempo window min points:", "int", 0, 1, 50, 1),
     ("start_speed_window_seconds", "Start speed window (s):", "float", 2, 0.1, 120.0, 0.5),
+    ("intro_score_tempo_weight_pct", "Intro score tempo weight (%):", "float", 0, 0.0, 100.0, 5.0),
 ]
 
 
@@ -169,7 +169,7 @@ class PipelineWorker(QObject):
             with contextlib.redirect_stdout(stream):
                 pipeline.run_pipeline(progress_callback=self._on_progress, **self.kwargs)
             stream.flush_remaining()
-            self.finished.emit("ok", "Pipeline completed successfully.")
+            self.finished.emit("ok", "Accompaniment completed successfully.")
         except pipeline.PipelineCancelled:
             stream.flush_remaining()
             self.finished.emit("cancelled", "Run cancelled.")
@@ -196,7 +196,7 @@ class PipelinePage(QWidget):
         outer.setSpacing(14)
         outer.addWidget(
             app_style.make_page_header(
-                "Pipeline", "Warp the orchestra to follow your recording and mix the master."
+                "Accompany", "Warp the orchestra to follow your recording and mix the master."
             )
         )
 
@@ -463,7 +463,8 @@ class PipelinePage(QWidget):
         self._closing = True
         self.cancel_run()
         window.hide()
-        self.pipeline_thread.wait()
+        if self.pipeline_thread is not None:
+            self.pipeline_thread.wait()
         return True
 
     # -- behavior -----------------------------------------------------------
@@ -539,6 +540,26 @@ class PipelinePage(QWidget):
             QMessageBox.warning(self.window(), "Missing input", "Output Folder path is not a directory.")
             return
 
+        # Warn before clobbering an existing file (mirrors run_pipeline's name normalisation).
+        out_name = (self.output_filename_edit.text().strip() or pipeline.DEFAULT_OUTPUT_FILENAME)
+        if not out_name.lower().endswith(".mp3"):
+            out_name += ".mp3"
+        target = (Path(output_dir_text) if output_dir_text else app_paths.DEFAULT_OUTPUT_DIR) / out_name
+        if target.exists():
+            box = QMessageBox(self.window())
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.setWindowTitle("File already exists")
+            box.setText(f"'{out_name}' already exists in the output folder.")
+            box.setInformativeText("Overwrite it, or go back and choose a different filename?")
+            overwrite_btn = box.addButton("Overwrite", QMessageBox.ButtonRole.DestructiveRole)
+            rename_btn = box.addButton("Choose another name", QMessageBox.ButtonRole.RejectRole)
+            box.setDefaultButton(rename_btn)
+            box.exec()
+            if box.clickedButton() is not overwrite_btn:
+                self.output_filename_edit.setFocus()
+                self.output_filename_edit.selectAll()
+                return
+
         kwargs = {
             "solo_midi_path": required["Solo MIDI"],
             "orchestra_midi_path": required["Orchestra MIDI"],
@@ -607,7 +628,7 @@ class PipelinePage(QWidget):
         else:
             self.stage_label.setText("Failed")
             app_style.set_pill(self.pill, "Failed", "failed")
-            QMessageBox.critical(self.window(), "Pipeline failed", message)
+            QMessageBox.critical(self.window(), "Accompaniment failed", message)
 
 
 class MainWindow(QMainWindow):

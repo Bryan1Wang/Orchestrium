@@ -1,10 +1,10 @@
 """Shared look-and-feel and small widgets for the Orchestrium GUIs."""
 
+import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPainter, QPixmap
-from PySide6.QtSvgWidgets import QSvgWidget  # noqa: F401 - ensures the Qt SVG plugin loads
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QApplication,
@@ -287,6 +287,30 @@ QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {
     background-color: #262320;
 }
 
+QSpinBox::up-button, QDoubleSpinBox::up-button,
+QSpinBox::down-button, QDoubleSpinBox::down-button {
+    width: 20px;
+    background: #3a352f;
+    border: none;
+}
+
+QSpinBox::up-button, QDoubleSpinBox::up-button {
+    border-top-right-radius: 6px;
+    border-bottom: 1px solid #2f2b27;
+}
+
+QSpinBox::down-button, QDoubleSpinBox::down-button {
+    border-bottom-right-radius: 6px;
+}
+
+QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+    background: #5c4426;
+}
+
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow { image: url("@up@"); width: 8px; }
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow { image: url("@down@"); width: 8px; }
+
 QTextEdit#log {
     font-family: Consolas, "Cascadia Mono", monospace;
     font-size: 9pt;
@@ -447,6 +471,18 @@ QToolTip {
     padding: 4px;
 }
 """
+
+
+
+
+# Qt stylesheets can only load arrow images from a file, so write them out.
+for _name, _d in (("up", "M1 4.5 L4 1.5 L7 4.5"), ("down", "M1 1.5 L4 4.5 L7 1.5")):
+    _f = Path(tempfile.gettempdir()) / f"orchestrium_{_name}.svg"
+    _f.write_text(
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 6"><path d="{_d}" '
+        'fill="none" stroke="#f2ede8" stroke-width="1.6" stroke-linecap="round"/></svg>'
+    )
+    STYLESHEET = STYLESHEET.replace(f"@{_name}@", _f.as_posix())
 
 
 class NoScrollSpinBox(QSpinBox):

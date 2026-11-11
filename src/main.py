@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 
 # Silence TensorFlow native startup logs (must run before tensorflow is imported,
 # which happens transitively via audio_utils -> transcribe -> basic_pitch)
@@ -41,6 +42,7 @@ class _CurveFitKwargs(TypedDict):
     tempo_window_seconds: float
     tempo_window_min_points: int
     start_speed_window_seconds: float
+    intro_score_tempo_weight_pct: float
 
 
 class PipelineCancelled(Exception):
@@ -142,6 +144,7 @@ def run_pipeline(
     tempo_window_seconds=5.0,
     tempo_window_min_points=4,
     start_speed_window_seconds=10.0,
+    intro_score_tempo_weight_pct=0.0,
     progress_callback=None,
 ):
     report = _ProgressReporter(progress_callback)
@@ -167,174 +170,180 @@ def run_pipeline(
         "tempo_window_seconds": tempo_window_seconds,
         "tempo_window_min_points": tempo_window_min_points,
         "start_speed_window_seconds": start_speed_window_seconds,
+        "intro_score_tempo_weight_pct": intro_score_tempo_weight_pct,
     }
 
-    print("Starting Music Alignment...")
+    # All intermediates live in their own folder so the output folder only
+    # ever gains the final mix. Never reuse/delete a pre-existing folder.
+    temp_dir = output_dir / f"{Path(output_filename).stem}_temp"
+    suffix = 1
+    while temp_dir.exists():
+        suffix += 1
+        temp_dir = output_dir / f"{Path(output_filename).stem}_temp{suffix}"
+    temp_dir.mkdir(parents=True)
 
-    # 1. Parse the mathematically perfect sheet music score
-    report(0)
-    print("Parsing sheet music MIDI score...")
-    sheet_music_sequence = score_reader.extract_notes(solo_midi_path)
-    print(f"Loaded {len(sheet_music_sequence)} chord/note events from the score.\n")
+    succeeded = False
+    try:
+        print("Starting Music Alignment...")
 
-    # 2. Transcribe the raw audio performance using Basic Pitch
-    report(1)
-    print("Transcribing live performance audio...")
-    player_onset_sequence = transcribe.transcribe(
-        rec_audio_path,
-        output_dir=output_dir,
-        filter_ghost_pitches=filter_ghost_pitches,
-        ghost_min_silence_seconds=ghost_min_silence_seconds,
-        ghost_silence_thresh_offset_db=ghost_silence_thresh_offset_db,
-    )
-    rec_midi_path = transcribe.generated_midi_path(rec_audio_path, output_dir=output_dir)
-    print(f"Extracted {len(player_onset_sequence)} performance events from audio.\n")
+        # 1. Parse the mathematically perfect sheet music score
+        report(0)
+        print("Parsing sheet music MIDI score...")
+        sheet_music_sequence = score_reader.extract_notes(solo_midi_path)
+        print(f"Loaded {len(sheet_music_sequence)} chord/note events from the score.\n")
 
-    # 3. Align the performance to the score using the DTW algorithm
-    report(2)
-    print("Aligning performance to sheet music...")
-    alignment_results = tempo_sync.align(
-        player_onset_sequence, sheet_music_sequence, polyphony_detection=polyphony_detection
-    )
-
-    print("\nAlignment Complete!")
-
-    """
-    # Track counts for the summary
-    matches_count = 0
-    for match_idx, (orch_time, player_time) in enumerate(alignment_results):
-        # 1. Find the matching chord in the sheet music by matching the timestamp
-        sheet_notes = set()
-        for time_stamp, notes in sheet_music_sequence:
-            if abs(time_stamp - orch_time) < 0.001:  # Small delta for float precision
-                sheet_notes = notes
-                break
-
-        # 2. Find the matching chord in the player data by matching the timestamp
-        player_notes = set()
-        for time_stamp, notes in player_onset_sequence:
-            if abs(time_stamp - player_time) < 0.001:
-                player_notes = notes
-                break
-
-        # 3. Format the sets into readable note names (e.g., {C4, E4, G4})
-        readable_sheet = format_note_set(sheet_notes)
-        readable_player = format_note_set(player_notes)
-
-        matches_count += 1
-
-        # Print everything nicely aligned with seconds and note clusters
-        print(
-            f"Match #{match_idx:03d} | Score: {orch_time:6.2f}s {readable_sheet:<18} -> SYNCED TO -> Player: {player_time:6.2f}s {readable_player}"
+        # 2. Transcribe the raw audio performance using Basic Pitch
+        report(1)
+        print("Transcribing live performance audio...")
+        player_onset_sequence = transcribe.transcribe(
+            rec_audio_path,
+            output_dir=temp_dir,
+            filter_ghost_pitches=filter_ghost_pitches,
+            ghost_min_silence_seconds=ghost_min_silence_seconds,
+            ghost_silence_thresh_offset_db=ghost_silence_thresh_offset_db,
         )
-    """
-    print(f"\nTotal Successful Matches Synced: {len(alignment_results)}")
+        rec_midi_path = transcribe.generated_midi_path(rec_audio_path, output_dir=temp_dir)
+        print(f"Extracted {len(player_onset_sequence)} performance events from audio.\n")
 
-    # Verified tutti rests need a warp curve to check expected player-time
-    # windows against -- build the plain (unshifted, unsplit) curve just for
-    # that lookup, per rest_utils.get_verified_tutti_rests's docstring.
-    report(3)
-    plain_warp = create_midi.build_warp_curve(alignment_results, **curve_fit_kwargs)
-    tutti_rests = rest_utils.get_verified_tutti_rests(
-        warp_time=plain_warp,
-        min_score_rest_seconds=min_score_rest_seconds,
-        min_recording_pause_seconds=min_recording_pause_seconds,
-        onset_leeway_seconds=onset_leeway_seconds,
-        solo_midi_path=solo_midi_path,
-        rec_midi_path=rec_midi_path,
-    )
-    print(f"\nFound {len(tutti_rests)} verified tutti rest(s): {tutti_rests}")
-
-    orchestra_score_path = (
-        Path(orchestra_midi_path)
-        if orchestra_midi_path
-        else app_paths.PROJECT_ROOT / "data" / "raw" / "ORCHESTRA.mid"
-    )
-    output_midi_path = output_dir / "output.mid"
-
-    report(4)
-    warp_time, diagnostics, intro_shift = create_midi.build_warp_curve(
-        alignment_results,
-        tutti_rests=tutti_rests,
-        extend_intro=True,
-        return_diagnostics=True,
-        **curve_fit_kwargs,
-    )
-    print(f"\nIntro shift: {intro_shift:.3f}s")
-
-    create_midi.warp_midi_file(
-        str(orchestra_score_path), warp_time, str(output_midi_path)
-    )
-
-    # Render the warped MIDI to audio via sfizz.
-    report(_RENDER_STAGE)
-    orchestra_rendered_path = output_dir / "orchestra_rendered.mp3"
-    orchestra_audio = orchestra_player.render_precise_gm_orchestra(
-        sfizz_path=sfizz_exe_path,
-        midi_filename=str(output_midi_path),
-        final_master_filename=str(orchestra_rendered_path),
-        vpo_dir=vpo_dir,
-        skip_track=skip_track,
-        progress_callback=lambda fraction: report(_RENDER_STAGE, fraction),
-    )
-
-    # Splice real silence into the recording at each extended tutti rest.
-    # RestRecord player-time fields are relative to the pre-intro-shift
-    # (i.e. raw REC.mp3) timeline, so no offset adjustment is needed here.
-    report(6)
-    extended_path = audio_utils.extend_rec_pauses(
-        diagnostics or [], rec_path=rec_audio_path, output_path=output_dir / "REC_extended.mp3"
-    )
-
-    # Mute the recording's own natural lead-in (an estimate is fine here --
-    # see mute_and_pad_intro's docstring) and pad back exactly enough silence
-    # so the recording's real content ends up intro_shift seconds later,
-    # matching where the warped MIDI's corresponding note lands.
-    report(7)
-    first_score_time = sheet_music_sequence[0][0]
-    entrance_estimate = plain_warp(first_score_time)
-    mute_time = max(0.0, entrance_estimate - 1.0)
-    print(f"Entrance estimate: {entrance_estimate:.3f}s, mute_time: {mute_time:.3f}s")
-
-    solo_audio = audio_utils.mute_and_pad_intro(
-        AudioSegment.from_mp3(extended_path), mute_time, intro_shift
-    )
-    solo_final_path = output_dir / "REC_trimmed.mp3"
-    solo_audio.export(solo_final_path, format="mp3")
-    #print(f"Wrote aligned solo audio to {solo_final_path}")
-
-    report(8)
-    if orchestra_audio is not None:
-        final_mix =audio_utils.overlay_with_gain(
-            orchestra_audio,
-            solo_audio,
-            orchestra_gain_db=orchestra_gain_db,
-            solo_gain_db=solo_gain_db,
+        # 3. Align the performance to the score using the DTW algorithm
+        report(2)
+        print("Aligning performance to sheet music...")
+        alignment_results = tempo_sync.align(
+            player_onset_sequence, sheet_music_sequence, polyphony_detection=polyphony_detection
         )
-        final_mix_path = output_dir / output_filename
-        final_mix.export(final_mix_path, format="mp3", bitrate="192k")
-        print(f"\nWrote final mix to {final_mix_path}")
 
-        if not keep_temp_files:
-            temp_paths = (
-                rec_midi_path,
-                output_midi_path,
-                orchestra_rendered_path,
-                extended_path,
-                solo_final_path,
-                output_dir / "basic_pitch_console.log",
-            )
-            for temp_path in temp_paths:
-                if temp_path != final_mix_path:
-                    temp_path.unlink(missing_ok=True)
+        print("\nAlignment Complete!")
+
+        """
+        # Track counts for the summary
+        matches_count = 0
+        for match_idx, (orch_time, player_time) in enumerate(alignment_results):
+            # 1. Find the matching chord in the sheet music by matching the timestamp
+            sheet_notes = set()
+            for time_stamp, notes in sheet_music_sequence:
+                if abs(time_stamp - orch_time) < 0.001:  # Small delta for float precision
+                    sheet_notes = notes
+                    break
+
+            # 2. Find the matching chord in the player data by matching the timestamp
+            player_notes = set()
+            for time_stamp, notes in player_onset_sequence:
+                if abs(time_stamp - player_time) < 0.001:
+                    player_notes = notes
+                    break
+
+            # 3. Format the sets into readable note names (e.g., {C4, E4, G4})
+            readable_sheet = format_note_set(sheet_notes)
+            readable_player = format_note_set(player_notes)
+
+            matches_count += 1
+
+            # Print everything nicely aligned with seconds and note clusters
             print(
-                "Removed intermediate files (enable 'Keep temporary/intermediate "
-                "files' to preserve them)."
+                f"Match #{match_idx:03d} | Score: {orch_time:6.2f}s {readable_sheet:<18} -> SYNCED TO -> Player: {player_time:6.2f}s {readable_player}"
             )
-    else:
-        print("Orchestra render produced nothing; skipping final mix.")
+        """
+        print(f"\nTotal Successful Matches Synced: {len(alignment_results)}")
 
-    report.done()
+        # Verified tutti rests need a warp curve to check expected player-time
+        # windows against -- build the plain (unshifted, unsplit) curve just for
+        # that lookup, per rest_utils.get_verified_tutti_rests's docstring.
+        report(3)
+        plain_warp = create_midi.build_warp_curve(alignment_results, **curve_fit_kwargs)
+        tutti_rests = rest_utils.get_verified_tutti_rests(
+            warp_time=plain_warp,
+            min_score_rest_seconds=min_score_rest_seconds,
+            min_recording_pause_seconds=min_recording_pause_seconds,
+            onset_leeway_seconds=onset_leeway_seconds,
+            solo_midi_path=solo_midi_path,
+            rec_midi_path=rec_midi_path,
+        )
+        print(f"\nFound {len(tutti_rests)} verified tutti rest(s): {tutti_rests}")
+
+        orchestra_score_path = (
+            Path(orchestra_midi_path)
+            if orchestra_midi_path
+            else app_paths.PROJECT_ROOT / "data" / "raw" / "ORCHESTRA.mid"
+        )
+        output_midi_path = temp_dir / "output.mid"
+
+        report(4)
+        warp_time, diagnostics, intro_shift = create_midi.build_warp_curve(
+            alignment_results,
+            tutti_rests=tutti_rests,
+            extend_intro=True,
+            return_diagnostics=True,
+            **curve_fit_kwargs,
+        )
+        print(f"\nIntro shift: {intro_shift:.3f}s")
+
+        create_midi.warp_midi_file(
+            str(orchestra_score_path), warp_time, str(output_midi_path)
+        )
+
+        # Render the warped MIDI to audio via sfizz.
+        report(_RENDER_STAGE)
+        orchestra_rendered_path = temp_dir / "orchestra_rendered.mp3"
+        orchestra_audio = orchestra_player.render_precise_gm_orchestra(
+            sfizz_path=sfizz_exe_path,
+            midi_filename=str(output_midi_path),
+            final_master_filename=str(orchestra_rendered_path),
+            vpo_dir=vpo_dir,
+            skip_track=skip_track,
+            progress_callback=lambda fraction: report(_RENDER_STAGE, fraction),
+        )
+
+        # Splice real silence into the recording at each extended tutti rest.
+        # RestRecord player-time fields are relative to the pre-intro-shift
+        # (i.e. raw REC.mp3) timeline, so no offset adjustment is needed here.
+        report(6)
+        extended_path = audio_utils.extend_rec_pauses(
+            diagnostics or [], rec_path=rec_audio_path, output_path=temp_dir / "REC_extended.mp3"
+        )
+
+        # Mute the recording's own natural lead-in (an estimate is fine here --
+        # see mute_and_pad_intro's docstring) and pad back exactly enough silence
+        # so the recording's real content ends up intro_shift seconds later,
+        # matching where the warped MIDI's corresponding note lands.
+        report(7)
+        first_score_time = sheet_music_sequence[0][0]
+        entrance_estimate = plain_warp(first_score_time)
+        mute_time = max(0.0, entrance_estimate - 1.0)
+        print(f"Entrance estimate: {entrance_estimate:.3f}s, mute_time: {mute_time:.3f}s")
+
+        solo_audio = audio_utils.mute_and_pad_intro(
+            AudioSegment.from_mp3(extended_path), mute_time, intro_shift
+        )
+        solo_final_path = temp_dir / "REC_trimmed.mp3"
+        solo_audio.export(solo_final_path, format="mp3")
+        #print(f"Wrote aligned solo audio to {solo_final_path}")
+
+        report(8)
+        if orchestra_audio is not None:
+            final_mix =audio_utils.overlay_with_gain(
+                orchestra_audio,
+                solo_audio,
+                orchestra_gain_db=orchestra_gain_db,
+                solo_gain_db=solo_gain_db,
+            )
+            final_mix_path = output_dir / output_filename
+            final_mix.export(final_mix_path, format="mp3", bitrate="192k")
+            print(f"\nWrote final mix to {final_mix_path}")
+
+            if keep_temp_files:
+                print(f"Kept intermediate files in {temp_dir}")
+            else:
+                print("Intermediate files will be removed.")
+        else:
+            print("Orchestra render produced nothing; skipping final mix.")
+
+        report.done()
+        succeeded = True
+    finally:
+        # Cancelled / failed / interrupted runs always clean up; a finished
+        # run keeps the folder only if asked to.
+        if not (succeeded and keep_temp_files):
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def main():

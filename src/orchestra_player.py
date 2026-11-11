@@ -1,4 +1,3 @@
-import os
 import subprocess
 import threading
 import time
@@ -47,14 +46,14 @@ def render_precise_gm_orchestra(
 
     PROJECT_ROOT = app_paths.PROJECT_ROOT
 
-    sfizz_path = os.path.abspath(PROJECT_ROOT / "bin" / sfizz_path)
-    if os.path.isabs(midi_filename):
-        midi_path = midi_filename
+    sfizz_path = (PROJECT_ROOT / "bin" / sfizz_path).resolve()
+    if Path(midi_filename).is_absolute():
+        midi_path = Path(midi_filename)
     else:
-        midi_path = os.path.abspath(PROJECT_ROOT / "data" / "raw" / midi_filename)
-    final_master = os.path.abspath(PROJECT_ROOT / final_master_filename)
+        midi_path = (PROJECT_ROOT / "data" / "raw" / midi_filename).resolve()
+    final_master = (PROJECT_ROOT / final_master_filename).resolve()
 
-    output_dir = os.path.dirname(final_master)
+    output_dir = final_master.parent
 
     # -----------------------------
     # SFZ LIBRARY PATHS
@@ -168,7 +167,7 @@ def render_precise_gm_orchestra(
     # LOAD MIDI
     # -----------------------------
 
-    mid = mido.MidiFile(midi_path)
+    mid = mido.MidiFile(str(midi_path))
 
     print("Original MIDI length:", round(mid.length, 2), "seconds")
 
@@ -245,7 +244,7 @@ def render_precise_gm_orchestra(
                 print("Skipping piano/keyboard track", track_index)
                 continue
 
-            if not os.path.exists(sfz):
+            if not Path(sfz).exists():
                 print("Missing SFZ:", sfz)
                 continue
 
@@ -259,11 +258,9 @@ def render_precise_gm_orchestra(
                 channel,
             )
 
-            temp_mid = os.path.join(
-                output_dir, f"render_{track_index}_{channel}_{program}.mid"
-            )
+            temp_mid = output_dir / f"render_{track_index}_{channel}_{program}.mid"
 
-            temp_wav = temp_mid.replace(".mid", ".wav")
+            temp_wav = temp_mid.with_suffix(".wav")
 
             out = mido.MidiFile(ticks_per_beat=mid.ticks_per_beat)
 
@@ -349,16 +346,16 @@ def render_precise_gm_orchestra(
             out.tracks.append(new_track)
 
             try:
-                out.save(temp_mid)
+                out.save(str(temp_mid))
 
                 command = [
-                    sfizz_path,
+                    str(sfizz_path),
                     "--sfz",
                     str(sfz),
                     "--midi",
-                    temp_mid,
+                    str(temp_mid),
                     "--wav",
-                    temp_wav,
+                    str(temp_wav),
                 ]
 
                 process = subprocess.Popen(
@@ -392,8 +389,8 @@ def render_precise_gm_orchestra(
                 else:
                     time.sleep(0.2)
 
-                    if os.path.exists(temp_wav):
-                        audio = AudioSegment.from_wav(temp_wav)
+                    if temp_wav.exists():
+                        audio = AudioSegment.from_wav(str(temp_wav))
 
                         print(
                             "Rendered length:",
@@ -403,11 +400,8 @@ def render_precise_gm_orchestra(
 
                         rendered.append(audio)
             finally:
-                if os.path.exists(temp_mid):
-                    os.remove(temp_mid)
-
-                if os.path.exists(temp_wav):
-                    os.remove(temp_wav)
+                temp_mid.unlink(missing_ok=True)
+                temp_wav.unlink(missing_ok=True)
 
     # -----------------------------
     # MIX
@@ -428,7 +422,7 @@ def render_precise_gm_orchestra(
 
     print("Final length:", round(mix.duration_seconds, 2), "seconds")
 
-    mix.export(final_master, format="mp3", bitrate="192k")
+    mix.export(str(final_master), format="mp3", bitrate="192k")
 
     # print("\nDONE:", final_master)
 

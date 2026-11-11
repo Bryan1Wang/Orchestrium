@@ -98,7 +98,7 @@ class AppWindow(QMainWindow):
 
         group = QButtonGroup(self)
         group.setExclusive(True)
-        for index, text in enumerate(("▶   Pipeline", "✂   Slicer")):
+        for index, text in enumerate(("▶   Accompany", "✂   Slicer")):
             button = QPushButton(text)
             button.setObjectName("navButton")
             button.setCheckable(True)
