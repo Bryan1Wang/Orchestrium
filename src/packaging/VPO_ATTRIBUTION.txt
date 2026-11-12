@@ -1,0 +1,66 @@
+VIRTUAL PLAYING ORCHESTRA 3 - SAMPLE CREDITS
+============================================
+
+The orchestra sounds in Orchestrium come from Virtual Playing Orchestra (VPO),
+a free orchestral sample library created by Paul Battersby:
+
+    https://virtualplaying.com/virtual-playing-orchestra/
+
+Orchestrium redistributes VPO unmodified and free of charge, as VPO's terms
+allow. VPO and its source material are free and must stay free: do not sell
+this library, in part or in whole.
+
+VPO is built from these free sample collections. Thanks to their creators:
+
+  Sonatina Symphonic Orchestra
+      by Mattias Westlund - http://sso.mattiaswestlund.net/
+      License: Creative Commons Sampling Plus 1.0
+               https://creativecommons.org/licenses/sampling+/1.0/
+
+  Mattias Westlund additional samples (horns, viola section)
+      by Mattias Westlund - http://mattiaswestlund.net/samples/
+      License: Creative Commons Attribution-ShareAlike 3.0 Unported (horns)
+               https://creativecommons.org/licenses/by-sa/3.0/
+               Creative Commons Attribution-ShareAlike 4.0 (viola section, built
+               from bandshed.net viola samples and the public-domain FluidGM soundfont)
+               https://creativecommons.org/licenses/by-sa/4.0/
+
+  No Budget Orchestra
+      by ssj71 - https://github.com/ssj71/No-Budget-Orchestra
+      Instruments by Jeff Glatt and others, from sounds by Freesound contributors
+      (each credited in that instrument's license.txt)
+      License: Creative Commons Attribution-ShareAlike 4.0 (sfz instruments)
+               https://creativecommons.org/licenses/by-sa/4.0/
+               Individual sounds: CC0, CC BY 3.0, CC BY-NC 3.0 or CC Sampling Plus 1.0,
+               as listed in each instrument's license.txt
+
+  VSCO 2 Community Edition
+      by Versilian Studios - http://vis.versilstudios.net/vsco-2.html
+      License: CC0 1.0 Universal (public domain dedication)
+               https://creativecommons.org/publicdomain/zero/1.0/
+
+  University of Iowa Electronic Music Studios - Musical Instrument Samples
+      http://theremin.music.uiowa.edu/MIS.html
+      License: "these recordings have been freely available on this website and
+               may be downloaded and used for any projects, without restrictions."
+
+  Philharmonia Orchestra sound samples
+      by Philharmonia Orchestra - https://philharmonia.co.uk/resources/sound-samples/
+      License: Creative Commons Attribution-ShareAlike 3.0 Unported
+               https://creativecommons.org/licenses/by-sa/3.0/
+
+  Celesta samples
+      by stamperadam (Freesound) - https://freesound.org/people/stamperadam/
+      License: Creative Commons 0 (public domain dedication)
+               https://creativecommons.org/publicdomain/zero/1.0/
+
+The full licensing terms ship with the library:
+    VPO\Documentation\license.htm      (VPO's licensing page)
+    VPO\libs\**\license.txt            (each source collection's own license)
+
+If anything here conflicts with the licensing section of
+https://virtualplaying.com/virtual-playing-orchestra/, the website is
+authoritative.
+
+Music you make with VPO is yours. VPO's author places no restrictions on
+using it to make music, including commercially.

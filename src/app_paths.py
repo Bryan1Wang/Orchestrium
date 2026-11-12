@@ -1,14 +1,18 @@
+import os
+import subprocess
+import sys
 from pathlib import Path
+
+# True inside the PyInstaller build (see packaging/), False when run from source.
+FROZEN = getattr(sys, "frozen", False)
 
 
 def _project_root() -> Path:
-    # Not currently building a standalone executable. If/when that resumes
-    # (e.g. via Nuitka), __file__-based resolution won't hold -- a compiled
-    # build's on-disk layout doesn't match <root>/src/<file>.py, so root
-    # would need to be derived from sys.executable (or whatever the chosen
-    # tool exposes) instead, similar to the commented-out branch below.
-    # if getattr(sys, "frozen", False):
-    #     return Path(sys.executable).resolve().parent
+    # Frozen (PyInstaller onedir): <root>/Orchestrium.exe, with bin/, VPO/,
+    # assets/ beside it -- the bundled code itself lives in <root>/_internal/,
+    # so __file__ no longer points at <root>/src/.
+    if FROZEN:
+        return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent.parent
 
 
@@ -16,13 +20,32 @@ PROJECT_ROOT = _project_root()
 
 
 def _default_output_dir() -> Path:
-    # Same caveat as above: a compiled build would likely be installed
-    # somewhere an unelevated process can't write to (e.g. Program Files),
-    # so the output default would need to move to a user-writable location
-    # (e.g. ~/Documents/Orchestrium/data/output) rather than PROJECT_ROOT.
-    # if getattr(sys, "frozen", False):
-    #     return Path.home() / "Documents" / "Orchestrium" / "data" / "output"
+    # An installed app's own folder (e.g. Program Files) usually isn't writable
+    # by an unelevated process, so a frozen build writes under Documents.
+    if FROZEN:
+        return Path.home() / "Documents" / "Orchestrium" / "data" / "output"
     return PROJECT_ROOT / "data" / "output"
 
 
 DEFAULT_OUTPUT_DIR = _default_output_dir()
+
+
+if FROZEN:
+    # pydub finds ffmpeg/ffprobe via PATH; users won't have them installed, so
+    # the build ships them in bin/.
+    os.environ["PATH"] = str(PROJECT_ROOT / "bin") + os.pathsep + os.environ.get("PATH", "")
+
+if FROZEN and sys.platform == "win32":
+    # The build is a windowed (no-console) app, so every console child process
+    # (ffmpeg/ffprobe via pydub, sfizz_render) would flash its own black console
+    # window. pydub doesn't expose creationflags, so default it for every Popen.
+    # Patching __init__ (not rebinding subprocess.Popen) also covers modules that
+    # already did `from subprocess import Popen`, regardless of import order.
+    _original_popen_init = subprocess.Popen.__init__
+
+    def _popen_init_no_window(self, *args, **kwargs):
+        if "creationflags" not in kwargs:
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+        _original_popen_init(self, *args, **kwargs)
+
+    subprocess.Popen.__init__ = _popen_init_no_window

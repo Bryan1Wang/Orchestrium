@@ -16,6 +16,10 @@ data/user/*
 VPO/*
 !VPO/.gitkeep
 
+# Packaging output (src/packaging/build.bat): build venv, vendored binaries, exe, installer
+build/*
+!build/.gitkeep
+
 .vscode/
 .claude/
 CLAUDE.md
