@@ -25,9 +25,10 @@
       <nav class="nav-links" id="navLinks">
         <a href="#demo">Demo</a>
         <a href="#features">Features</a>
+        <a href="#the-apps">Tools</a>
         <a href="#how-it-works">How it Works</a>
-        <a href="#the-apps">The Apps</a>
-        <a href="#built-with">Built With</a>
+        <a href="#download">Download</a>
+        <a href="#built-with">Credits</a>
         <a class="btn btn-ghost btn-sm" href="https://github.com/Bryan1Wang/Orchestrium" target="_blank"
           rel="noopener">GitHub</a>
       </nav>
@@ -54,9 +55,7 @@
           into one finished recording.
         </p>
         <div class="hero-cta">
-          <a class="btn btn-primary" href="https://github.com/Bryan1Wang/Orchestrium" target="_blank" rel="noopener">
-            View on GitHub
-          </a>
+          <a class="btn btn-primary" href="#download">Download for Windows</a>
           <a class="btn btn-ghost" href="#how-it-works">See How it Works</a>
         </div>
 
@@ -221,47 +220,11 @@
       </div>
     </section>
 
-    <!-- How it works -->
-    <section class="section alt" id="how-it-works">
-      <div class="container">
-        <div class="section-head reveal">
-          <span class="eyebrow">How it Works</span>
-          <h2>From a recording to a finished mix</h2>
-          <p>Four steps, all handled for you.</p>
-        </div>
-
-        <div class="steps">
-          <div class="step reveal">
-            <div class="step-num">1</div>
-            <h3>Prepare your files</h3>
-            <p>Point the app at your solo score, the full orchestra score, and a recording of yourself playing.</p>
-          </div>
-          <div class="step reveal">
-            <div class="step-num">2</div>
-            <h3>It listens &amp; aligns</h3>
-            <p>Orchestrium transcribes your recording and figures out exactly how your timing differs from the score.
-            </p>
-          </div>
-          <div class="step reveal">
-            <div class="step-num">3</div>
-            <h3>The orchestra is warped</h3>
-            <p>The accompaniment is reshaped to follow your performance, then rendered with real sampled instruments.
-            </p>
-          </div>
-          <div class="step reveal">
-            <div class="step-num">4</div>
-            <h3>Get your finished mix</h3>
-            <p>Your recording and the new orchestra are blended into a single, ready-to-share master track.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <!-- The apps -->
-    <section class="section" id="the-apps">
+    <section class="section alt" id="the-apps">
       <div class="container">
         <div class="section-head reveal">
-          <span class="eyebrow">The Apps</span>
+          <span class="eyebrow">The Tools</span>
           <h2>Two simple tools, one window</h2>
           <p>Switch between them from the sidebar. Everything runs locally on your computer.</p>
         </div>
@@ -310,11 +273,47 @@
       </div>
     </section>
 
+    <!-- How it works -->
+    <section class="section" id="how-it-works">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow">How it Works</span>
+          <h2>From a recording to a finished mix</h2>
+          <p>Four steps, all handled for you.</p>
+        </div>
+
+        <div class="steps">
+          <div class="step reveal">
+            <div class="step-num">1</div>
+            <h3>Prepare your files</h3>
+            <p>Point the app at your solo score, the full orchestra score, and a recording of yourself playing.</p>
+          </div>
+          <div class="step reveal">
+            <div class="step-num">2</div>
+            <h3>It listens &amp; aligns</h3>
+            <p>Orchestrium transcribes your recording and figures out exactly how your timing differs from the score.
+            </p>
+          </div>
+          <div class="step reveal">
+            <div class="step-num">3</div>
+            <h3>The orchestra is warped</h3>
+            <p>The accompaniment is reshaped to follow your performance, then rendered with real sampled instruments.
+            </p>
+          </div>
+          <div class="step reveal">
+            <div class="step-num">4</div>
+            <h3>Get your finished mix</h3>
+            <p>Your recording and the new orchestra are blended into a single, ready-to-share master track.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Built with -->
     <section class="section alt" id="built-with">
       <div class="container">
         <div class="section-head reveal">
-          <span class="eyebrow">Under the Hood</span>
+          <span class="eyebrow">Credits</span>
           <h2>Built on great open tools</h2>
           <p>Orchestrium stands on the shoulders of some excellent open-source and sample-library work.</p>
         </div>
@@ -327,39 +326,27 @@
       </div>
     </section>
 
-    <!-- CTA -->
-    <section class="section">
+    <!-- Download -->
+    <section class="section" id="download">
       <div class="container">
         <div class="cta-band reveal">
           <h2>Ready to try it yourself?</h2>
-          <p>Grab the project from GitHub and run it locally (Windows).</p>
-          <ol class="cta-steps">
-            <li><strong>Install <a href="https://www.python.org/downloads/" target="_blank" rel="noopener">Python
-                  3.11</a></strong> (the version Orchestrium is developed on) and
-              <strong><a href="https://ffmpeg.org/download.html" target="_blank" rel="noopener">ffmpeg</a></strong>,
-              which is needed to read and write MP3s. Make sure both are on your PATH.</li>
-            <li><strong>Download the <a href="https://virtualplaying.com/virtual-playing-orchestra/" target="_blank"
-                  rel="noopener">Virtual Playing Orchestra</a></strong> from its website. You need two zips: the
-              <strong>Wave Files</strong> and the <strong>Standard Orchestra</strong> sfz scripts (not the Performance
-              Orchestra). Extract both into the project's <code>VPO</code> folder, so folders like
-              <code>Strings</code> and <code>Woodwinds</code> sit directly inside it.</li>
-            <li><strong>Clone the project and launch the app:</strong></li>
-          </ol>
-          <div class="code-snippet">
-            <div>git clone https://github.com/Bryan1Wang/Orchestrium.git</div>
-            <div>cd Orchestrium</div>
-            <div>python -m venv env</div>
-            <div>env\Scripts\activate.bat</div>
-            <div>pip install -r requirements.txt</div>
-            <div>python src\orchestrium.py</div>
-          </div>
-          <p class="cta-note">The <code>VPO</code> folder is created when you clone, so extract the samples into it
-            after the <code>git clone</code> step. You'll also need a solo MIDI, an orchestra MIDI and a recording of
-            your playing.</p>
-          <div class="hero-cta" style="margin-bottom:0;">
-            <a class="btn btn-primary" href="https://github.com/Bryan1Wang/Orchestrium" target="_blank"
+          <p>Download the Windows installer. It includes everything Orchestrium needs, including the orchestral
+            sample library, so there is nothing else to set up.</p>
+          <div class="hero-cta" style="margin-bottom:24px;">
+            <a class="btn btn-primary" href="https://github.com/Bryan1Wang/Orchestrium/releases/latest" target="_blank" rel="noopener">Download Installer (Windows)</a>
+            <a class="btn btn-ghost" href="https://github.com/Bryan1Wang/Orchestrium" target="_blank"
               rel="noopener">View on GitHub</a>
           </div>
+          <ol class="cta-steps">
+            <li><strong>Download</strong> <code>Orchestrium-Setup</code> from the latest release.</li>
+            <li><strong>Run the installer</strong> and launch Orchestrium from the Start menu.</li>
+            <li><strong>Pick your files:</strong> a solo MIDI, an orchestra MIDI and a recording of your playing, then press Generate Recording.</li>
+          </ol>
+          <p class="cta-note">Windows may show a SmartScreen warning because the installer isn't code-signed. Choose
+            <em>More info</em>, then <em>Run anyway</em>. Prefer to run from source? See the
+            <a href="https://github.com/Bryan1Wang/Orchestrium#running-from-source" target="_blank"
+              rel="noopener">instructions on GitHub</a>.</p>
         </div>
       </div>
     </section>

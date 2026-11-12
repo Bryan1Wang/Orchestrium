@@ -18,7 +18,11 @@ No conductor, no backing band, no manual editing required — just record yourse
 - 🖱️ **Simple, point-and-click tools** — two easy desktop apps handle everything; no coding or audio engineering experience needed.
 - 🎚️ **You stay in control** — independent volume sliders let you balance your recording against the orchestra before the final mix.
 
-## 🚀 Getting Started
+## ⬇️ Download (Windows)
+
+Grab the installer from the [latest release](https://github.com/Bryan1Wang/Orchestrium/releases/latest). It bundles everything, including the orchestral samples, so there's nothing else to install. Run it, launch Orchestrium from the Start menu, pick your solo MIDI, orchestra MIDI and recording, and press **Generate Recording**.
+
+## Running from source
 
 1. Install [Python 3.11](https://www.python.org/downloads/) (the version Orchestrium is developed on) and [ffmpeg](https://ffmpeg.org/download.html) (needed to read and write MP3s). Make sure both are on your PATH.
 2. Clone the project:
@@ -35,7 +39,7 @@ No conductor, no backing band, no manual editing required — just record yourse
    ```
 5. Launch the app:
    ```
-   python src\main_gui.py
+   python src\orchestrium.py
    ```
 6. Pick your solo instrument's score (MIDI), the full orchestra score (MIDI), and your recording of yourself playing, then hit **Run Pipeline**.
 
