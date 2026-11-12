@@ -18,6 +18,19 @@
     });
   }
 
+  // Light/dark theme toggle (dark by default)
+  var themeBtn = document.getElementById("themeToggle");
+  if (themeBtn) {
+    var root = document.documentElement;
+    themeBtn.addEventListener("click", function () {
+      var current = root.getAttribute("data-theme") || "dark";
+      var next = current === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("theme", next); } catch (e) {}
+      document.dispatchEvent(new Event("themechange"));
+    });
+  }
+
   // Scroll-reveal animation
   var revealEls = document.querySelectorAll(".reveal");
   if ("IntersectionObserver" in window && revealEls.length) {

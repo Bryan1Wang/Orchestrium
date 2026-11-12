@@ -181,6 +181,7 @@
   });
   wave.addEventListener("click", seek);
   window.addEventListener("resize", draw);
+  document.addEventListener("themechange", draw);
 
   draw();
   updateTime();

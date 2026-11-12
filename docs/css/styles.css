@@ -29,9 +29,8 @@
   --shadow-glow: 0 0 0 1px rgba(242, 164, 74, 0.15), 0 8px 30px -10px rgba(242, 164, 74, 0.25);
 }
 
-/* Light theme fallback, in case a user forces light mode */
-@media (prefers-color-scheme: light) {
-  :root {
+/* Dark is the default. Light applies only when the visitor picks it with the toggle. */
+:root[data-theme="light"] {
     --bg: #faf8f5;
     --bg-alt: #f1ede6;
     --surface: #ffffff;
@@ -41,7 +40,6 @@
     --text-dim: #5a564e;
     --text-faint: #948e80;
     --shadow-soft: 0 20px 60px -25px rgba(20, 15, 5, 0.25);
-  }
 }
 
 * { box-sizing: border-box; }
@@ -89,9 +87,7 @@ section { position: relative; }
   background: rgba(14, 14, 18, 0.72);
   border-bottom: 1px solid var(--border);
 }
-@media (prefers-color-scheme: light) {
-  .navbar { background: rgba(250, 248, 245, 0.78); }
-}
+:root[data-theme="light"] .navbar { background: rgba(250, 248, 245, 0.78); }
 
 .navbar .container {
   display: flex;
@@ -135,6 +131,33 @@ section { position: relative; }
   color: var(--text);
   cursor: pointer;
 }
+
+.theme-toggle {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 120;
+  box-shadow: var(--shadow-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.theme-toggle:hover { color: var(--text); border-color: var(--amber-dim); }
+.theme-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.theme-toggle svg { width: 18px; height: 18px; }
+/* Shows the icon of the theme you'd switch to: sun while dark, moon while light */
+.theme-toggle .icon-moon { display: none; }
+:root[data-theme="light"] .theme-toggle .icon-moon { display: block; }
+:root[data-theme="light"] .theme-toggle .icon-sun { display: none; }
 
 /* ---------- Buttons ---------- */
 .btn {
